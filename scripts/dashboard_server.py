@@ -1062,20 +1062,24 @@ def find_free_port(start_port: int = 8080) -> int:
 
 
 def main():
+    is_deployed = bool(os.environ.get("RENDER") or os.environ.get("PORT"))
+    default_port = int(os.environ["PORT"]) if os.environ.get("PORT", "").isdigit() else 8080
+
     parser = argparse.ArgumentParser(description="Launch Verification Framework Web Dashboard")
-    parser.add_argument("--port", type=int, default=8080, help="Port to bind dashboard server (default: 8080)")
+    parser.add_argument("--port", type=int, default=default_port, help=f"Port to bind dashboard server (default: {default_port})")
     parser.add_argument("--no-browser", action="store_true", help="Do not open web browser automatically")
     args = parser.parse_args()
 
-    port = find_free_port(args.port)
-    server_addr = ("127.0.0.1", port)
+    port = args.port if is_deployed else find_free_port(args.port)
+    host = "0.0.0.0" if is_deployed else "127.0.0.1"
+    server_addr = (host, port)
 
     # Initialize execution manager
     mgr = ExecutionManager(ROOT_DIR)
     DashboardHandler.execution_mgr = mgr
 
     httpd = ThreadingHTTPServer(server_addr, DashboardHandler)
-    url = f"http://127.0.0.1:{port}"
+    url = f"http://{host}:{port}"
 
     print("=" * 80)
     print("   RTL VERIFICATION & AUTOMATED REGRESSION FRAMEWORK DASHBOARD")
@@ -1088,7 +1092,7 @@ def main():
     print("  Press Ctrl+C to stop the dashboard server.")
     print("=" * 80 + "\n")
 
-    if not args.no_browser:
+    if not args.no_browser and not is_deployed:
         def open_browser():
             time.sleep(0.8)
             webbrowser.open(url)
