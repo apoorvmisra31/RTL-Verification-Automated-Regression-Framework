@@ -30,23 +30,23 @@ package fifo_pkg;
     int pkg_error_count = 0;
 
     // Logging helpers with standardized prefix formatting
-    function automatic void log_info(string msg);
+    task automatic log_info(string msg);
         $display("[INFO]  [%0t ns] %s", $time, msg);
-    endfunction
+    endtask
 
-    function automatic void log_warn(string msg);
+    task automatic log_warn(string msg);
         $display("[WARN]  [%0t ns] %s", $time, msg);
-    endfunction
+    endtask
 
-    function automatic void log_error(string msg);
+    task automatic log_error(string msg);
         pkg_error_count++;
         $display("*** ERROR: [%0t ns] %s", $time, msg);
-    endfunction
+    endtask
 
-    function automatic void log_fatal(string msg);
+    task automatic log_fatal(string msg);
         pkg_error_count++;
         $display("*** FATAL: [%0t ns] %s", $time, msg);
-    endfunction
+    endtask
 
     function automatic int get_pkg_error_count();
         return pkg_error_count;
