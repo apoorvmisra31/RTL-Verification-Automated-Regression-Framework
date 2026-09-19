@@ -1,0 +1,20 @@
+# Simulation Binaries & Scratch Files
+sim/*.vvp
+sim/*.vcd
+sim/*.log
+
+# Waveform Output Files
+waves/*.vcd
+
+# Regression Logs & Generated Reports
+reports/logs/*.log
+reports/regression_summary.json
+reports/regression_summary.csv
+reports/regression_report.md
+
+# Python
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store

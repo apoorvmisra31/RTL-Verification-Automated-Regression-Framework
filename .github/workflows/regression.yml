@@ -1,0 +1,79 @@
+name: RTL Verification & Automated Regression
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  regression:
+    name: Run Verification Regression Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog
+
+      - name: Toolchain Diagnostic Check
+        run: |
+          iverilog -V | head -n 2
+          vvp -V | head -n 2
+          python3 --version
+
+      - name: Run Full Clean Regression Suite
+        run: |
+          make regression
+
+      - name: Validate Defect Injection Detection (BUG_INJECT_OVERFLOW)
+        run: |
+          echo "Verifying that the regression suite detects injected hardware defects..."
+          set +e
+          python3 scripts/regression.py --bug BUG_INJECT_OVERFLOW
+          BUG_EXIT=$?
+          set -e
+          if [ $BUG_EXIT -ne 0 ]; then
+            echo "SUCCESS: Defect BUG_INJECT_OVERFLOW was correctly caught by the verification environment (exit code $BUG_EXIT)."
+          else
+            echo "ERROR: Verification suite failed to catch injected defect BUG_INJECT_OVERFLOW!"
+            exit 1
+          fi
+
+      - name: Validate Defect Injection Detection (BUG_INJECT_UNDERFLOW_FLAG)
+        run: |
+          echo "Verifying that the regression suite detects underflow flag suppression..."
+          set +e
+          python3 scripts/regression.py --bug BUG_INJECT_UNDERFLOW_FLAG
+          BUG_EXIT=$?
+          set -e
+          if [ $BUG_EXIT -ne 0 ]; then
+            echo "SUCCESS: Defect BUG_INJECT_UNDERFLOW_FLAG was correctly caught by assertions (exit code $BUG_EXIT)."
+          else
+            echo "ERROR: Verification suite failed to catch injected defect BUG_INJECT_UNDERFLOW_FLAG!"
+            exit 1
+          fi
+
+      - name: Re-run Clean Regression for Final Artifact Generation
+        run: |
+          make regression
+
+      - name: Upload Regression Reports & Logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: regression-reports
+          path: |
+            reports/regression_summary.json
+            reports/regression_summary.csv
+            reports/regression_report.md
+            reports/logs/*.log

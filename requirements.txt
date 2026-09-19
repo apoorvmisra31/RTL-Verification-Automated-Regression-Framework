@@ -1,0 +1,8 @@
+# RTL Verification & Regression Framework Dependencies
+#
+# The core test execution, regression engine, log parsing, and reporting
+# infrastructure (run_test.py, regression.py, generate_report.py) are built
+# strictly using the Python 3 Standard Library (sys, os, subprocess, argparse,
+# json, csv, pathlib, time, re).
+#
+# ZERO external third-party Python packages are required to run this framework.
