@@ -95,10 +95,10 @@ wave:
 		echo "Waveform $(WAVES_DIR)/$(TEST).vcd not found. Generating now..."; \
 		$(PYTHON) $(SCRIPTS_DIR)/run_test.py --test $(TEST) --wave; \
 	fi
-	@if command -v gtkwave >/dev/null 2>&1; then \
+	@if [ -d "/Applications/gtkwave.app" ]; then \
+		open -a /Applications/gtkwave.app $(WAVES_DIR)/$(TEST).vcd; \
+	elif command -v gtkwave >/dev/null 2>&1; then \
 		gtkwave $(WAVES_DIR)/$(TEST).vcd & \
-	elif [ -d "/Applications/gtkwave.app" ]; then \
-		open -a gtkwave $(WAVES_DIR)/$(TEST).vcd; \
 	else \
 		echo "GTKWave executable not found in PATH or Applications."; \
 		echo "To inspect waveforms on macOS, run: brew install --cask gtkwave"; \

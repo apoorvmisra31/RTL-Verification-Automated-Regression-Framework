@@ -644,24 +644,37 @@ def parse_vcd_waveform(vcd_path: Path, max_changes_per_signal: int = 400) -> dic
 def launch_gtkwave(vcd_path: Path) -> tuple:
     """Launch GTKWave locally on macOS or Linux."""
     if not vcd_path.is_file():
-        return False, f"Waveform file not found at {vcd_path}"
+        return False, f"Waveform file not found at {vcd_path.name}. Run the test with waveform dumping enabled first."
 
-    gtkwave_bin = find_tool("gtkwave")
-    
-    # Check macOS app bundle
-    if not gtkwave_bin and Path("/Applications/gtkwave.app").exists():
+    # On macOS, prioritize launching the native .app bundle via 'open -a'
+    # This prevents issues with outdated Perl wrapper scripts (/opt/homebrew/bin/gtkwave) requiring Switch.pm
+    if sys.platform == "darwin":
+        for app_path in ["/Applications/gtkwave.app", str(Path.home() / "Applications" / "gtkwave.app")]:
+            if Path(app_path).exists():
+                try:
+                    res = subprocess.run(["open", "-a", app_path, str(vcd_path)], capture_output=True, text=True, timeout=5)
+                    if res.returncode == 0:
+                        return True, f"Opened {vcd_path.name} in GTKWave desktop application."
+                    return False, f"macOS 'open' failed: {res.stderr.strip()}"
+                except Exception as e:
+                    return False, f"Failed to launch GTKWave app: {str(e)}"
+
+        # Try generic open -a gtkwave
         try:
-            subprocess.Popen(["open", "-a", "gtkwave", str(vcd_path)])
-            return True, "Opened in GTKWave via macOS application bundle."
-        except Exception as e:
-            return False, f"Failed to open GTKWave app: {str(e)}"
+            res = subprocess.run(["open", "-a", "gtkwave", str(vcd_path)], capture_output=True, text=True, timeout=5)
+            if res.returncode == 0:
+                return True, f"Opened {vcd_path.name} in GTKWave desktop application."
+        except Exception:
+            pass
 
+    # Linux or fallback CLI binary in PATH
+    gtkwave_bin = find_tool("gtkwave")
     if gtkwave_bin:
         try:
             subprocess.Popen([gtkwave_bin, str(vcd_path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return True, f"Launched {gtkwave_bin} in background."
+            return True, f"Launched GTKWave ({gtkwave_bin}) with {vcd_path.name} in background."
         except Exception as e:
-            return False, f"Failed to launch GTKWave: {str(e)}"
+            return False, f"Failed to launch GTKWave binary: {str(e)}"
 
     return False, "GTKWave executable not found. Install on macOS with: brew install --cask gtkwave"
 

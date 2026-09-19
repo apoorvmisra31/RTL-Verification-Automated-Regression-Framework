@@ -589,11 +589,23 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   els.btnOpenGtkwave.addEventListener('click', () => {
-    const test = els.selectWaveTest.value;
+    let test = els.selectWaveTest.value;
+    if (!test && els.selectWaveTest.options.length > 1) {
+      els.selectWaveTest.selectedIndex = 1;
+      test = els.selectWaveTest.value;
+    }
     if (!test) {
       showToast("Select a test first.", "warn");
       return;
     }
+
+    const origHtml = els.btnOpenGtkwave.innerHTML;
+    els.btnOpenGtkwave.disabled = true;
+    els.btnOpenGtkwave.innerHTML = `
+      <svg class="spin" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round"/></svg>
+      <span>Opening GTKWave...</span>
+    `;
+
     fetch('/api/waves/open', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -601,8 +613,18 @@ document.addEventListener('DOMContentLoaded', () => {
     })
       .then(res => res.json())
       .then(data => {
-        if (data.success) showToast(data.message, 'info');
-        else showToast(data.error || 'Failed to open GTKWave', 'error');
+        if (data.success) {
+          showToast(data.message, 'success');
+        } else {
+          showToast(data.error || 'Failed to open GTKWave', 'error');
+        }
+      })
+      .catch(err => {
+        showToast(`Network error: ${err.message}`, 'error');
+      })
+      .finally(() => {
+        els.btnOpenGtkwave.disabled = false;
+        els.btnOpenGtkwave.innerHTML = origHtml;
       });
   });
 
