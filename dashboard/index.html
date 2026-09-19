@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RTL Verification & Automated Regression Dashboard</title>
+  <meta name="description" content="Primary Control Surface for Synchronous FIFO RTL Verification, Automated Regression Suite, In-Browser Waveforms, and Defect-Injection Lab.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-wrapper">
+          <div class="logo-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 6h16M4 12h16M4 18h16M7 3v18M17 3v18" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="logo-text">
+            <span class="logo-title">RTL VERIFY</span>
+            <span class="logo-subtitle">REGRESSION SUITE</span>
+          </div>
+        </div>
+        <div class="dut-tag">DUT: sync_fifo.sv</div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="overview">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/>
+          </svg>
+          <span>Overview</span>
+        </button>
+        <button class="nav-item" data-tab="tests">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+          </svg>
+          <span>Test Catalog</span>
+          <span class="nav-badge" id="nav-tests-count">10</span>
+        </button>
+        <button class="nav-item" data-tab="regression">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          <span>Regression Suite</span>
+        </button>
+        <button class="nav-item" data-tab="waveforms">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M2 12h3l3-8 4 16 3-8h3l3-4 3 4"/>
+          </svg>
+          <span>Waveform Debug</span>
+        </button>
+        <button class="nav-item" data-tab="logs">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+          </svg>
+          <span>Log Inspector</span>
+        </button>
+        <button class="nav-item" data-tab="reports">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+          </svg>
+          <span>Reports & Data</span>
+        </button>
+        <button class="nav-item highlight-tab" data-tab="defect-lab">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+          </svg>
+          <span>Defect Lab</span>
+        </button>
+        <button class="nav-item" data-tab="system">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span>System Health</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="system-status-pill online" id="status-pill">
+          <span class="status-dot"></span>
+          <span class="status-label" id="status-label">Simulator Ready</span>
+        </div>
+        <div class="version-meta">Icarus Verilog 13.0 • Python 3</div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Content -->
+    <main class="main-content">
+      <!-- Top Bar / Action Header -->
+      <header class="top-header">
+        <div class="header-left">
+          <h1 class="view-title" id="current-view-title">Verification Overview</h1>
+          <p class="view-subtitle" id="current-view-subtitle">System metrics, real-time simulator status, and quick operations</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-secondary" id="btn-clean-workspace" title="Clean build binaries, logs, and temp artifacts">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+            <span>Clean</span>
+          </button>
+          <button class="btn btn-primary" id="btn-quick-regression">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            <span>Run Full Regression</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Global Live Progress Banner (shown when a job is active) -->
+      <div class="live-job-banner hidden" id="live-job-banner">
+        <div class="job-banner-info">
+          <div class="job-spinner"></div>
+          <div>
+            <div class="job-banner-title" id="job-banner-title">Running Regression Suite...</div>
+            <div class="job-banner-detail" id="job-banner-detail">Test 1 of 10 • test_reset</div>
+          </div>
+        </div>
+        <div class="job-banner-progress">
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill" id="job-progress-bar" style="width: 0%"></div>
+          </div>
+          <span class="progress-pct" id="job-progress-pct">0%</span>
+        </div>
+        <div class="job-banner-actions">
+          <button class="btn btn-danger btn-sm" id="btn-cancel-job">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Tab Content 1: Overview -->
+      <section class="tab-panel active" id="tab-overview">
+        <!-- KPI Cards Grid -->
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-label">TOTAL VERIFICATION TESTS</span>
+              <span class="kpi-icon blue">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              </span>
+            </div>
+            <div class="kpi-value" id="kpi-total-tests">10</div>
+            <div class="kpi-footer">100% Discovered in <code>tests/</code></div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-label">LAST REGRESSION STATUS</span>
+              <span class="kpi-icon emerald">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              </span>
+            </div>
+            <div class="kpi-value emerald" id="kpi-pass-rate">100.0%</div>
+            <div class="kpi-footer" id="kpi-pass-count">10 Passed • 0 Failed</div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-label">EXECUTION DURATION</span>
+              <span class="kpi-icon cyan">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </span>
+            </div>
+            <div class="kpi-value" id="kpi-duration">0.091s</div>
+            <div class="kpi-footer" id="kpi-timestamp">Last executed: Just now</div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-label">SIMULATOR ENGINE</span>
+              <span class="kpi-icon purple">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+              </span>
+            </div>
+            <div class="kpi-value text-sm" id="kpi-sim-name">Icarus Verilog 13.0</div>
+            <div class="kpi-footer">Runtime: <code>vvp</code> (IEEE 1800-2012)</div>
+          </div>
+        </div>
+
+        <!-- Two Column Content -->
+        <div class="grid-2col">
+          <!-- Quick Operations & Hardware Spec Card -->
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">DUT Architecture & Parameters</h2>
+              <span class="badge badge-outline">sync_fifo.sv</span>
+            </div>
+            <div class="card-body">
+              <div class="spec-matrix">
+                <div class="spec-item">
+                  <span class="spec-label">Data Width</span>
+                  <span class="spec-val">8 bits (BYTE)</span>
+                </div>
+                <div class="spec-item">
+                  <span class="spec-label">Storage Depth</span>
+                  <span class="spec-val">16 words</span>
+                </div>
+                <div class="spec-item">
+                  <span class="spec-label">High Watermark</span>
+                  <span class="spec-val">14 words (Depth - 2)</span>
+                </div>
+                <div class="spec-item">
+                  <span class="spec-label">Low Watermark</span>
+                  <span class="spec-val">2 words (Thresh = 2)</span>
+                </div>
+                <div class="spec-item">
+                  <span class="spec-label">Clock Rate</span>
+                  <span class="spec-val">100 MHz (10ns period)</span>
+                </div>
+                <div class="spec-item">
+                  <span class="spec-label">Protection</span>
+                  <span class="spec-val">Active Overflow & Underflow</span>
+                </div>
+              </div>
+
+              <div class="divider"></div>
+              <h3 class="subsection-title">Quick Actions</h3>
+              <div class="action-buttons-grid">
+                <button class="action-btn" id="btn-quick-reset-test">
+                  <span class="action-btn-title">Test 1: Run Reset Check</span>
+                  <span class="action-btn-desc">Verify default registers and recovery</span>
+                </button>
+                <button class="action-btn" id="btn-quick-burst-test">
+                  <span class="action-btn-title">Test 3: Run Burst Test</span>
+                  <span class="action-btn-desc">Back-to-back 8-word write/read</span>
+                </button>
+                <button class="action-btn" id="btn-quick-overflow-test">
+                  <span class="action-btn-title">Test 7: Overflow Protection</span>
+                  <span class="action-btn-desc">Verify memory non-corruption on full</span>
+                </button>
+                <button class="action-btn" id="btn-quick-defect-lab">
+                  <span class="action-btn-title">Defect Injection Demo</span>
+                  <span class="action-btn-desc">Demonstrate RTL defect detection</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Test Suite Distribution & Health -->
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">Verification Suite Health</h2>
+              <span class="badge badge-success" id="badge-regression-overall">10/10 PASS</span>
+            </div>
+            <div class="card-body">
+              <div class="category-breakdown" id="category-breakdown">
+                <!-- Dynamically populated categories -->
+              </div>
+
+              <div class="divider"></div>
+              <h3 class="subsection-title">Latest Execution Highlights</h3>
+              <div class="highlights-list" id="overview-highlights">
+                <div class="highlight-item success">
+                  <span class="hl-dot"></span>
+                  <span>Zero scoreboard data mismatches across 10 test suites.</span>
+                </div>
+                <div class="highlight-item success">
+                  <span class="hl-dot"></span>
+                  <span>All SVA safety invariant assertions evaluated cleanly.</span>
+                </div>
+                <div class="highlight-item success">
+                  <span class="hl-dot"></span>
+                  <span>Process exit code 0 propagated to regression engine.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Content 2: Test Catalog -->
+      <section class="tab-panel" id="tab-tests">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Verification Test Catalog</h2>
+              <p class="card-subtitle">Select any individual test to run with custom seed or waveform dumping</p>
+            </div>
+            <div class="filter-group">
+              <select id="select-test-category" class="form-control">
+                <option value="ALL">All Categories</option>
+                <option value="Reset">Reset</option>
+                <option value="Directed">Directed</option>
+                <option value="Functional">Functional</option>
+                <option value="Boundary">Boundary</option>
+                <option value="Corner Case">Corner Case</option>
+                <option value="Error / Robustness">Error / Robustness</option>
+                <option value="Stress">Stress</option>
+              </select>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div class="tests-table-wrapper">
+              <table class="data-table" id="table-tests-catalog">
+                <thead>
+                  <tr>
+                    <th>Test Identifier</th>
+                    <th>Category</th>
+                    <th>Description</th>
+                    <th>Artifacts</th>
+                    <th class="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-tests-catalog">
+                  <!-- Populated via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Content 3: Regression Suite -->
+      <section class="tab-panel" id="tab-regression">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Automated Regression Orchestrator</h2>
+              <p class="card-subtitle">Run the complete verification suite with live progress monitoring</p>
+            </div>
+            <div class="header-controls">
+              <label class="checkbox-label">
+                <input type="checkbox" id="chk-regression-wave">
+                <span>Dump Waveforms for All Tests</span>
+              </label>
+              <button class="btn btn-primary" id="btn-start-regression">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>Start Regression</span>
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <!-- Live Progress State -->
+            <div class="regression-live-box">
+              <div class="regression-status-row">
+                <div class="reg-state-group">
+                  <span class="reg-state-label">Execution State:</span>
+                  <span class="reg-state-val" id="reg-state-val">IDLE</span>
+                </div>
+                <div class="reg-state-group">
+                  <span class="reg-state-label">Active Test:</span>
+                  <span class="reg-state-val" id="reg-active-test">None</span>
+                </div>
+                <div class="reg-state-group">
+                  <span class="reg-state-label">Elapsed Time:</span>
+                  <span class="reg-state-val" id="reg-elapsed-time">0.00s</span>
+                </div>
+              </div>
+              <div class="progress-bar-bg lg">
+                <div class="progress-bar-fill" id="reg-progress-fill" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <!-- Terminal Live Streaming Output -->
+            <div class="terminal-container">
+              <div class="terminal-header">
+                <div class="terminal-dots">
+                  <span class="dot red"></span>
+                  <span class="dot yellow"></span>
+                  <span class="dot green"></span>
+                </div>
+                <span class="terminal-title">LIVE SIMULATOR LOG STREAM</span>
+                <button class="btn-terminal-clear" id="btn-clear-terminal">Clear Console</button>
+              </div>
+              <div class="terminal-body" id="regression-terminal-body">
+                <div class="term-line info">[SYSTEM] Regression engine standing by. Click 'Start Regression' to execute.</div>
+              </div>
+            </div>
+
+            <!-- Results Matrix -->
+            <div class="mt-4">
+              <h3 class="subsection-title">Regression Results Matrix</h3>
+              <div class="tests-table-wrapper">
+                <table class="data-table" id="table-regression-results">
+                  <thead>
+                    <tr>
+                      <th>Test Name</th>
+                      <th>Status</th>
+                      <th>Duration</th>
+                      <th>Data Mismatches</th>
+                      <th>Assertion Fails</th>
+                      <th>Details</th>
+                      <th class="text-right">Log</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-regression-results">
+                    <!-- Populated via JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Content 4: Waveform Debug -->
+      <section class="tab-panel" id="tab-waveforms">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Digital Waveform Timing Diagram Debugger</h2>
+              <p class="card-subtitle">Interactive in-browser logic viewer with cycle inspection and desktop GTKWave launching</p>
+            </div>
+            <div class="header-controls">
+              <select id="select-wave-test" class="form-control">
+                <option value="">Select Test Waveform...</option>
+              </select>
+              <button class="btn btn-secondary" id="btn-load-waveform">Load Waveform</button>
+              <button class="btn btn-primary" id="btn-open-gtkwave">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                <span>Open in GTKWave</span>
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <!-- Waveform Controls Toolbar -->
+            <div class="waveform-toolbar">
+              <div class="wave-tool-group">
+                <button class="tool-btn" id="btn-wave-zoom-in" title="Zoom In">+</button>
+                <button class="tool-btn" id="btn-wave-zoom-out" title="Zoom Out">-</button>
+                <button class="tool-btn" id="btn-wave-zoom-reset" title="Fit to Screen">Fit</button>
+              </div>
+              <div class="wave-info-group">
+                <span class="wave-meta" id="wave-time-cursor">Cursor: 0.0 ns</span>
+                <span class="wave-meta" id="wave-max-time">Duration: 0 ns</span>
+                <span class="wave-meta" id="wave-signals-count">Signals: 0</span>
+              </div>
+            </div>
+
+            <!-- Canvas Waveform Display Area -->
+            <div class="waveform-canvas-container" id="waveform-canvas-container">
+              <canvas id="waveform-canvas"></canvas>
+            </div>
+
+            <!-- Waveform Signal Guide -->
+            <div class="wave-signals-legend mt-4">
+              <h3 class="subsection-title">Key Signals Reference</h3>
+              <div class="signals-legend-grid">
+                <div class="legend-item"><span class="sig-badge bit">clk</span> 100MHz System Clock</div>
+                <div class="legend-item"><span class="sig-badge bit">rst_n</span> Active-Low Reset</div>
+                <div class="legend-item"><span class="sig-badge bit">wr_en</span> Write Request</div>
+                <div class="legend-item"><span class="sig-badge bus">wr_data[7:0]</span> Write Data Payload</div>
+                <div class="legend-item"><span class="sig-badge bit">rd_en</span> Read Request</div>
+                <div class="legend-item"><span class="sig-badge bus">rd_data[7:0]</span> Synchronous Read Data</div>
+                <div class="legend-item"><span class="sig-badge bit">full</span> Capacity Limit (Count=16)</div>
+                <div class="legend-item"><span class="sig-badge bit">empty</span> Drained State (Count=0)</div>
+                <div class="legend-item"><span class="sig-badge bus">count[4:0]</span> Real-Time Fill Count</div>
+                <div class="legend-item"><span class="sig-badge err">overflow</span> Illegal Write Attempt</div>
+                <div class="legend-item"><span class="sig-badge err">underflow</span> Illegal Read Attempt</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Content 5: Log Inspector -->
+      <section class="tab-panel" id="tab-logs">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Simulation Log Inspector</h2>
+              <p class="card-subtitle">Examine raw simulator logs, assertion diagnostics, and scoreboard mismatches</p>
+            </div>
+            <div class="header-controls">
+              <select id="select-log-test" class="form-control">
+                <option value="">Select Test Log...</option>
+              </select>
+              <input type="text" id="input-log-filter" class="form-control" placeholder="Search log text...">
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div class="log-viewer-container" id="log-viewer-container">
+              <pre class="log-code" id="log-content-pre">Select a test log above to inspect its execution trace.</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Content 6: Reports & Data -->
+      <section class="tab-panel" id="tab-reports">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Generated Regression Reports & Metrics</h2>
+              <p class="card-subtitle">Access machine-readable and human-readable verification deliverables</p>
+            </div>
+            <div class="header-controls">
+              <button class="btn btn-secondary" id="btn-download-json">Download JSON</button>
+              <button class="btn btn-secondary" id="btn-download-csv">Download CSV</button>
+              <button class="btn btn-secondary" id="btn-download-md">Download Markdown</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="reports-tabs">
+              <button class="report-tab-btn active" data-report-view="md">Markdown Summary</button>
+              <button class="report-tab-btn" data-report-view="csv">CSV Table</button>
+              <button class="report-tab-btn" data-report-view="json">JSON Metadata</button>
+            </div>
+
+            <div class="report-view-content" id="report-view-content">
+              <!-- Rendered report content -->
+              <div id="report-md-render" class="markdown-preview"></div>
+              <div id="report-csv-render" class="csv-table-preview hidden"></div>
+              <pre id="report-json-render" class="json-preview hidden"></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Content 7: Defect Lab -->
+      <section class="tab-panel" id="tab-defect-lab">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Defect Injection & Detection Lab</h2>
+              <p class="card-subtitle">Controlled, deterministic demonstration proving that the verification suite detects hardware defects</p>
+            </div>
+            <span class="badge badge-warning">Verification Quality Assurance</span>
+          </div>
+          <div class="card-body">
+            <div class="defect-wizard-intro">
+              <p>A verification framework is only valid if it deterministically detects defects in the RTL. Select a defect below and run the automated 3-stage validation workflow:</p>
+            </div>
+
+            <!-- Defect Selection -->
+            <div class="defect-selector-box">
+              <label class="form-label">Select Controlled Hardware Defect to Inject:</label>
+              <select id="select-defect-macro" class="form-control lg">
+                <option value="BUG_INJECT_OVERFLOW">BUG_INJECT_OVERFLOW - Disables write protection on full; corrupts memory</option>
+                <option value="BUG_INJECT_UNDERFLOW_FLAG">BUG_INJECT_UNDERFLOW_FLAG - Suppresses underflow error flag generation</option>
+                <option value="BUG_INJECT_COUNT_SIMULTANEOUS">BUG_INJECT_COUNT_SIMULTANEOUS - Miscalculates occupancy on simultaneous RW</option>
+                <option value="BUG_INJECT_ALMOST_FULL">BUG_INJECT_ALMOST_FULL - Inverts almost_full watermark calculation</option>
+                <option value="BUG_INJECT_RESET_NEGLECT">BUG_INJECT_RESET_NEGLECT - Fails to clear error flags during reset</option>
+              </select>
+              <div class="defect-desc-box" id="defect-desc-box">
+                Disables overflow write protection. The FIFO accepts writes when full without reading, overwriting stored data and masking the overflow pulse flag.
+              </div>
+            </div>
+
+            <!-- 3-Stage Progress Visualizer -->
+            <div class="defect-steps-stepper">
+              <div class="step-item" id="step-1">
+                <div class="step-circle">1</div>
+                <div class="step-label">Inject Defect & Run Regression</div>
+                <div class="step-sub">Expected: FAIL detected</div>
+              </div>
+              <div class="step-line" id="line-1"></div>
+              <div class="step-item" id="step-2">
+                <div class="step-circle">2</div>
+                <div class="step-label">Inspect Detection Diagnostics</div>
+                <div class="step-sub">Scoreboard & Assertions</div>
+              </div>
+              <div class="step-line" id="line-2"></div>
+              <div class="step-item" id="step-3">
+                <div class="step-circle">3</div>
+                <div class="step-label">Restore Clean Baseline</div>
+                <div class="step-sub">Expected: 100% PASS</div>
+              </div>
+            </div>
+
+            <div class="defect-action-row">
+              <button class="btn btn-danger lg" id="btn-run-defect-demo">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                <span>Execute Complete Defect Lab Demonstration</span>
+              </button>
+            </div>
+
+            <!-- Live Defect Console -->
+            <div class="terminal-container mt-4">
+              <div class="terminal-header">
+                <div class="terminal-dots">
+                  <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                </div>
+                <span class="terminal-title">DEFECT DEMONSTRATION LOG</span>
+              </div>
+              <div class="terminal-body" id="defect-terminal-body">
+                <div class="term-line info">[LAB] Ready to execute defect injection demonstration.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Content 8: System & Settings -->
+      <section class="tab-panel" id="tab-system">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">System Environment & Diagnostics</h2>
+              <p class="card-subtitle">Host system inspection, toolchain versions, and process configurations</p>
+            </div>
+            <button class="btn btn-secondary" id="btn-refresh-system">Refresh Status</button>
+          </div>
+          <div class="card-body">
+            <div class="system-info-grid" id="system-info-grid">
+              <!-- Dynamically populated system info -->
+            </div>
+
+            <div class="divider"></div>
+            <h3 class="subsection-title">Workspace Management</h3>
+            <p class="text-secondary text-sm mb-3">Safely remove compiled simulator binaries (<code>sim/*.vvp</code>), test execution logs (<code>reports/logs/*.log</code>), and temporary waveforms.</p>
+            <button class="btn btn-danger" id="btn-clean-system">Clean All Build & Log Artifacts</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Single Test Run Modal -->
+  <div class="modal-overlay hidden" id="modal-run-test">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-test-title">Configure & Run Test</h3>
+        <button class="modal-close" id="btn-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc" id="modal-test-desc">Directed functional test.</p>
+        
+        <div class="form-group">
+          <label class="form-label">Random PRNG Seed:</label>
+          <input type="number" id="modal-input-seed" class="form-control" value="42">
+          <small class="form-hint">Used for constrained-random stimulus generation and repeatable test vectors.</small>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="modal-chk-wave" checked>
+            <span>Dump Waveform (VCD) for Debugging</span>
+          </label>
+          <small class="form-hint">Generates <code>waves/&lt;testname&gt;.vcd</code> for in-browser or GTKWave inspection.</small>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Optional Defect Injection (for verification testing):</label>
+          <select id="modal-select-bug" class="form-control">
+            <option value="">None (Clean Golden RTL)</option>
+            <option value="BUG_INJECT_OVERFLOW">BUG_INJECT_OVERFLOW</option>
+            <option value="BUG_INJECT_UNDERFLOW_FLAG">BUG_INJECT_UNDERFLOW_FLAG</option>
+            <option value="BUG_INJECT_COUNT_SIMULTANEOUS">BUG_INJECT_COUNT_SIMULTANEOUS</option>
+            <option value="BUG_INJECT_ALMOST_FULL">BUG_INJECT_ALMOST_FULL</option>
+            <option value="BUG_INJECT_RESET_NEGLECT">BUG_INJECT_RESET_NEGLECT</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-modal-cancel">Cancel</button>
+        <button class="btn btn-primary" id="btn-modal-execute">Launch Simulation</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="js/waveform_viewer.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

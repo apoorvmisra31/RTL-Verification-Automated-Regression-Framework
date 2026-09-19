@@ -1,103 +1,121 @@
-# Troubleshooting Guide
+# Troubleshooting & Diagnostic Guide
 
-## 1. Missing Tools / Command Not Found
-
-### Symptom
-```text
-zsh: command not found: iverilog
-```
-or
-```text
-zsh: command not found: vvp
-```
-
-### Root Cause
-`iverilog` is either not installed or Homebrew's binary directory is not in your current shell session's `PATH`.
-
-### Solution
-1. On Apple Silicon Macs (M1/M2/M3/M4), Homebrew installs into `/opt/homebrew/bin`. Verify that Homebrew is installed:
-   ```bash
-   /opt/homebrew/bin/brew --version
-   ```
-2. If Homebrew is installed but not in your `PATH`, export it:
-   ```bash
-   export PATH="/opt/homebrew/bin:$PATH"
-   ```
-   To make this permanent, add it to your `~/.zshrc`:
-   ```bash
-   echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc
-   ```
-3. If `iverilog` is not yet installed:
-   ```bash
-   brew install icarus-verilog
-   ```
-4. Verify installation:
-   ```bash
-   iverilog -V
-   vvp -V
-   ```
+A comprehensive troubleshooting reference for the **RTL Verification & Automated Regression Studio**, covering local environment setup, dashboard operations, simulator diagnostics, and waveform visualization.
 
 ---
 
-## 2. GTKWave Issues on macOS
+## 1. Dashboard Launch & Networking Diagnostics
 
-### Symptom
-`gtkwave` command does not open or macOS reports an untrusted developer warning.
-
-### Solution
-1. Install GTKWave using Homebrew:
-   ```bash
-   brew install --cask gtkwave
-   ```
-2. If macOS Gatekeeper blocks opening GTKWave on first launch, open **System Settings -> Privacy & Security**, scroll down to the Security section, and click **Open Anyway** next to GTKWave.
-3. Alternatively, open generated `.vcd` files using the `gtkwave` binary directly:
-   ```bash
-   open -a gtkwave waves/test_single_write_read.vcd
-   ```
-   Or use any modern waveform viewer such as VSCode WaveTrace / Surfer.
-
----
-
-## 3. Python Execution Issues
-
-### Symptom
+### Symptom: `Address already in use` or Port 8080 Conflict
 ```text
-/usr/bin/python3: No module named ...
+OSError: [Errno 48] Address already in use
 ```
+- **Cause**: Another service on your workstation (e.g. an existing web server, proxy, or Docker container) is actively using port `8080`.
+- **Automatic Resolution**: The dashboard server (`dashboard_server.py`) includes built-in port hunting. If port `8080` is busy, it automatically increments and binds to the next free port (`8081`, `8082`, etc.).
+- **Manual Custom Port**: You can explicitly designate an alternative port:
+  ```bash
+  python3 scripts/dashboard_server.py --port 9000
+  ```
 
-### Solution
-The entire automation suite (scripts `run_test.py`, `regression.py`, `generate_report.py`) is written strictly with the **Python 3 Standard Library** (`argparse`, `json`, `csv`, `subprocess`, `pathlib`, `dataclasses`, `time`). It requires **zero** third-party packages.
-If you encounter module errors, verify you are invoking standard Python 3.8+:
-```bash
-python3 --version
-```
+### Symptom: `Launch_Dashboard.command` Shows Permission Denied on macOS
+- **Cause**: The executable permission bit was not set on the script.
+- **Resolution**:
+  ```bash
+  chmod +x Launch_Dashboard.command launch_dashboard.sh
+  ```
+  Once set, double-clicking `Launch_Dashboard.command` in macOS Finder will launch the studio immediately.
+
+### Symptom: Dashboard Shows "Disconnected / Connection Refused"
+- **Cause**: The background server process was terminated or stopped.
+- **Resolution**: Re-launch the server using `./launch_dashboard.sh` or `make dashboard`. Verify the process is running locally:
+  ```bash
+  lsof -i :8080
+  ```
 
 ---
 
-## 4. Simulator Compilation Warnings or Errors
+## 2. Hardware Simulator (`iverilog` / `vvp`) Diagnostics
 
-### Symptom
+### Symptom: Simulator Status Shows "NOT FOUND" in Dashboard
+- **Cause**: The `iverilog` and `vvp` executables are not located within your environment `PATH`.
+- **Resolution**:
+  - **macOS (Apple Silicon M1/M2/M3/M4)**: Homebrew packages are located in `/opt/homebrew/bin`. Verify installation:
+    ```bash
+    brew install icarus-verilog
+    ```
+    Ensure your shell configuration (`~/.zshrc`) contains:
+    ```bash
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+    ```
+  - **Ubuntu / Debian Linux**:
+    ```bash
+    sudo apt-get update && sudo apt-get install iverilog
+    ```
+  - **Verification**: Navigate to the **System Health** panel in the dashboard to confirm detected paths for both `iverilog` and `vvp`.
+
+### Symptom: Elaboration or Syntax Error during Simulation
 ```text
 syntax error in SystemVerilog source
 ```
-
-### Solution
-Always ensure the `-g2012` flag is supplied to `iverilog`:
-```bash
-iverilog -g2012 -Wall -I rtl -I tb -I tests -o sim/tb_top.vvp ...
-```
-The Makefile and Python runner automatically pass this flag.
+- **Cause**: Icarus Verilog defaults to older Verilog-1995/2001 mode unless instructed.
+- **Resolution**: The framework automatically enforces `-g2012` flag across all compilations. If compiling manually, ensure `-g2012` is included:
+  ```bash
+  iverilog -g2012 -Wall -I rtl -I tb -I tests -o sim/tb_top.vvp tb/tb_top.sv rtl/sync_fifo.sv
+  ```
 
 ---
 
-## 5. Cleaning Build and Output Artifacts
+## 3. Waveform Debugger Diagnostics
 
-If the build directory enters an inconsistent state after aborting a test or switching branches:
-```bash
-make clean
-```
-This removes:
-- `sim/*.vvp` (compiled simulation binaries)
-- `reports/logs/*.log` (test execution logs)
-- `reports/regression_summary.json` and `reports/regression_summary.csv`
-- `waves/*.vcd` (waveform dumps)
+### Symptom: In-Browser Waveform Canvas is Blank
+- **Cause**: The test was executed without the waveform dumping flag enabled (`+DUMP_WAVE=1`).
+- **Resolution**:
+  1. Open the **Test Catalog** in the dashboard.
+  2. Click **Configure & Run** on the target test card.
+  3. Ensure the **"Dump Waveforms (.vcd)"** checkbox is ticked.
+  4. Click **Run Test**.
+  5. Once completed, navigate to the **Waveforms** tab and select the test from the dropdown list.
+
+### Symptom: GTKWave Does Not Open when Clicking "Launch GTKWave"
+- **Cause**: GTKWave is not installed or blocked by macOS Gatekeeper security policies.
+- **Resolution**:
+  1. **Install GTKWave**:
+     - **macOS**: `brew install --cask gtkwave`
+     - **Linux**: `sudo apt-get install gtkwave`
+  2. **macOS Gatekeeper First Launch**:
+     If macOS blocks opening GTKWave with an "unidentified developer" prompt:
+     - Open **System Settings -> Privacy & Security**.
+     - Scroll to the Security section.
+     - Click **Open Anyway** next to GTKWave.
+  3. **Direct File Access**:
+     Waveform `.vcd` files are always generated in the `waves/` directory:
+     ```bash
+     open -a gtkwave waves/test_burst_write_read.vcd
+     ```
+     You can also view these files with modern VSCode extensions such as **WaveTrace** or **Surfer**.
+
+---
+
+## 4. Defect-Injection Lab Diagnostics
+
+### Symptom: Clean Regression Fails after Running Defect Lab
+- **Cause**: A previous simulation was forcibly killed mid-execution, leaving the injected compiler define active or the workspace binary stale.
+- **Resolution**:
+  1. Open the **System Health** panel in the dashboard.
+  2. Click the **"Purge Build Artifacts & Logs"** button.
+  3. Alternatively, trigger a clean compile from the **Regression Suite** panel.
+  4. In terminal: `make clean && make regression`.
+
+---
+
+## 5. Python Runtime Diagnostics
+
+### Symptom: `No module named ...`
+- **Cause**: Python is running in a misconfigured virtual environment or calling an incompatible interpreter.
+- **Resolution**:
+  The entire framework—including the web dashboard server, REST API, regression runner, and report generator—is built **strictly using the Python 3 Standard Library**. It requires **zero** third-party packages (`no pip install`, `no flask`, `no npm`, `no node`).
+  Verify your interpreter version:
+  ```bash
+  python3 --version
+  ```
+  Python 3.8+ (Python 3.9, 3.10, 3.11, 3.12, 3.13) is fully supported.

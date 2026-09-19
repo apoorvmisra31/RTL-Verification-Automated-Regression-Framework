@@ -25,16 +25,21 @@ SEED  ?= 42
 WAVE  ?= 0
 BUG   ?=
 
-.PHONY: all help compile test regression regression-bug wave report clean
+.PHONY: all help dashboard gui compile test regression regression-bug wave report clean
 
 # Default target
-all: regression
+all: dashboard
 
 help:
 	@echo "================================================================================"
 	@echo "             SYNC FIFO VERIFICATION & REGRESSION FRAMEWORK"
 	@echo "================================================================================"
-	@echo "  Available Targets:"
+	@echo "  PRIMARY INTERFACE (Recommended):"
+	@echo "    make dashboard                Launch interactive Verification Studio Web UI"
+	@echo "    ./launch_dashboard.sh         One-click shell launcher"
+	@echo "    Launch_Dashboard.command      Double-click launcher in macOS Finder"
+	@echo ""
+	@echo "  Headless / Terminal Targets (Automation & CI):"
 	@echo "    make compile                  Compile simulation binary (tb_top_clean.vvp)"
 	@echo "    make test TEST=<name>         Run single test (e.g. TEST=test_burst_write_read)"
 	@echo "                              Optional flags: WAVE=1 (dump VCD), SEED=<int>"
@@ -45,6 +50,12 @@ help:
 	@echo "    make report                   Display latest regression report summary"
 	@echo "    make clean                    Remove all build, log, report, and wave artifacts"
 	@echo "================================================================================"
+
+dashboard:
+	@$(PYTHON) $(SCRIPTS_DIR)/dashboard_server.py
+
+gui: dashboard
+
 
 compile:
 	@mkdir -p $(SIM_DIR) $(LOGS_DIR) $(WAVES_DIR)

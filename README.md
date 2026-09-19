@@ -1,485 +1,416 @@
-# Synchronous FIFO RTL Verification & Automated Regression Framework
+# RTL Verification & Automated Regression Studio
 
-A complete, production-grade, reproducible hardware verification and automated regression environment built for SystemVerilog digital design. 
+An interactive, production-grade SystemVerilog verification environment and automated regression studio.
 
-This repository demonstrates the end-to-end verification lifecycle:
-$$\text{RTL} \longrightarrow \text{Testbench} \longrightarrow \text{Stimulus} \longrightarrow \text{DUT Execution} \longrightarrow \text{Monitoring} \longrightarrow \text{Checking} \longrightarrow \text{Assertions} \longrightarrow \text{Simulation} \longrightarrow \text{Regression} \longrightarrow \text{Reporting} \longrightarrow \text{CI}$$
+This framework transforms traditional hardware verification into a **dashboard-first control surface**, enabling digital designers and verification engineers to discover tests, trigger simulations, monitor real-time execution, inspect in-browser digital waveforms, and run controlled defect-injection experiments **without requiring manual terminal commands**.
+
+$$\text{Interactive Dashboard} \longleftrightarrow \text{REST API Engine} \longleftrightarrow \text{Regression Orchestrator} \longleftrightarrow \text{Icarus Verilog} \longleftrightarrow \text{DUT / SVA / Scoreboard}$$
 
 ---
 
 ## Table of Contents
-1. [Project Overview](#1-project-overview)
-2. [Verification Architecture](#2-verification-architecture)
-3. [Repository Structure](#3-repository-structure)
-4. [Technology Stack & Justification](#4-technology-stack--justification)
-5. [Prerequisites](#5-prerequisites)
-6. [Installation & Setup](#6-installation--setup)
-7. [Running an Individual Test](#7-running-an-individual-test)
-8. [Running the Full Automated Regression Suite](#8-running-the-full-automated-regression-suite)
-9. [Waveform Inspection with GTKWave](#9-waveform-inspection-with-gtkwave)
-10. [Understanding Reports & Metrics](#10-understanding-reports--metrics)
-11. [Defect-Injection Verification (Mandatory Demo)](#11-defect-injection-verification-mandatory-demo)
-12. [Continuous Integration (GitHub Actions)](#12-continuous-integration-github-actions)
-13. [Verification Methodology](#13-verification-methodology)
-14. [Limitations](#14-limitations)
-15. [Future Extensions](#15-future-extensions)
+1. [Primary Objective & Overview](#1-primary-objective--overview)
+2. [Full-Stack System Architecture](#2-full-stack-system-architecture)
+3. [Technology Stack & Justification](#3-technology-stack--justification)
+4. [Prerequisites](#4-prerequisites)
+5. [One-Click Dashboard Launch](#5-one-click-dashboard-launch)
+6. [Dashboard Control Surface Guide](#6-dashboard-control-surface-guide)
+   - [Overview & KPI Summary](#panel-1-overview--kpi-summary)
+   - [Test Catalog](#panel-2-test-catalog)
+   - [Regression Suite & Live Streaming](#panel-3-regression-suite--live-streaming)
+   - [Waveform Debugger (In-Browser & GTKWave)](#panel-4-waveform-debugger)
+   - [Log Inspector](#panel-5-log-inspector)
+   - [Reports & Export](#panel-6-reports--export)
+   - [Defect-Injection Verification Lab](#panel-7-defect-injection-verification-lab)
+   - [System Health & Environment Diagnostics](#panel-8-system-health--diagnostics)
+7. [In-Browser Waveform Visualization vs GTKWave](#7-in-browser-waveform-visualization-vs-gtkwave)
+8. [Defect-Injection Demonstration Workflow](#8-defect-injection-demonstration-workflow)
+9. [Continuous Integration (GitHub Actions)](#9-continuous-integration-github-actions)
+10. [Repository File Inventory](#10-repository-file-inventory)
+11. [Developer & CI CLI Reference](#11-developer--ci-cli-reference)
+12. [Troubleshooting Guide](#12-troubleshooting-guide)
+13. [Process Safety & Security Boundaries](#13-process-safety--security-boundaries)
+14. [Known Limitations & Sign-Off](#14-known-limitations--sign-off)
 
 ---
 
-## 1. Project Overview
+## 1. Primary Objective & Overview
 
-This project provides an industry-realistic verification environment for a **Parameterized Synchronous FIFO (`sync_fifo.sv`) with Status Protection, Watermark Thresholds, and Simultaneous Read/Write Capability**.
+Traditional semiconductor verification frameworks rely heavily on terminal scripts, fragmented log grep commands, and external viewers. This project integrates the entire verification lifecycle into a unified, locally hosted **Verification Studio**:
 
-### Primary Verification Objectives
-- **Data Integrity**: Guarantee that every word written to the FIFO is read out in exact first-in, first-out order without bit flips, drops, or duplications.
-- **Protocol Safety**: Ensure that illegal operations (writing when full, reading when empty) are safely blocked, error flags (`overflow`, `underflow`) are raised, and stored memory is protected.
-- **Boundary & Watermark Checking**: Verify exact single-cycle assertion and deassertion of `empty`, `full`, `almost_empty`, and `almost_full` status flags.
-- **Concurrent Transactions**: Validate steady-state occupancy during continuous simultaneous write and read requests across empty, partial, and full conditions.
-- **Automated Regression**: Execute a 10-test regression suite orchestrated by a robust Python 3 engine that outputs machine-readable JSON/CSV metrics and human-readable Markdown summaries.
-- **Defect Detection**: Prove through compile-time macro injections that the scoreboard and SystemVerilog Assertions (SVA) deterministically detect RTL bugs.
+- **Target DUT**: Parameterized Synchronous FIFO (`sync_fifo.sv`) with 8-bit data width, 16-word depth, almost-full/almost-empty watermark flags, protocol error flags (`overflow`, `underflow`), and concurrent read/write support.
+- **Verification Harness**: Layered SystemVerilog testbench featuring an active stimulus driver, cycle-accurate bus monitor, independent golden reference queue scoreboard, and formal SVA safety assertions.
+- **Primary Control Surface**: A responsive web studio operating locally on macOS and Linux that provides complete operational parity with headless workflows.
+
+### Verified Capabilities
+- **Zero-Terminal User Workflow**: All operational actions—from test launch to waveform inspection—are accessible via UI buttons.
+- **Real-Time Job Streaming**: Live execution tracking with step progress and Server-Sent Events (SSE) terminal logs.
+- **In-Browser Timing Diagrams**: Interactive HTML5 Canvas digital waveform viewer with zoom, pan, and cursor time-measurement.
+- **Native GTKWave Bridge**: One-click local launch of GTKWave for deep multi-hierarchy debug sessions.
+- **Deterministic Defect Lab**: A 3-stage controlled hardware defect injection experiment verifying that the verification harness deterministically catches RTL bugs and restores golden clean code.
 
 ---
 
-## 2. Verification Architecture
-
-The testbench strictly separates stimulus generation, signal observation, and independent checking:
+## 2. Full-Stack System Architecture
 
 ```
 +-----------------------------------------------------------------------------------------+
-|                                    TESTBENCH TOP (tb_top.sv)                            |
+|                                    USER WORKSTATION                                     |
 |                                                                                         |
-|  100MHz Clock Generator | Reset Controller | Plusarg Dispatcher (+TESTNAME, +SEED, +WAVE)
-|  -------------------------------------------------------------------------------------  |
-|  SystemVerilog Safety Assertions (fifo_assertions.sv)                                   |
-|  -------------------------------------------------------------------------------------  |
-|    +-------------------+       +--------------------+       +-----------------------+   |
-|    |   Test Sequences  | ----> |    FIFO Driver     | ----> |       DUT             |   |
-|    |   (tests/*.sv)    |       |  (fifo_driver.sv)  |       |   (sync_fifo.sv)      |   |
-|    +-------------------+       +--------------------+       +-----------------------+   |
-|                                          |                              |               |
-|                                          v (wr_mon)                     v (rd_mon)      |
-|                                 +-----------------------------------------------+       |
-|                                 |                 FIFO Monitor                  |       |
-|                                 |              (fifo_monitor.sv)                |       |
-|                                 +-----------------------------------------------+       |
-|                                          |                              |               |
-|                                          v (tx)                         v (tx)          |
-|                                 +-----------------------------------------------+       |
-|                                 |          Independent FIFO Scoreboard          |       |
-|                                 |             (fifo_scoreboard.sv)              |       |
-|                                 |  - Golden Reference Queue Model               |       |
-|                                 |  - Occupancy & Flag State Tracker             |       |
-|                                 |  - Cycle-by-cycle Bitwise Comparator          |       |
-|                                 |  - End-of-test Drain Accounting               |       |
-|                                 +-----------------------------------------------+       |
+|   +---------------------------------------------------------------------------------+   |
+|   |                  MODERN WEB BROWSER (Safari, Chrome, Firefox, Edge)             |   |
+|   |                                                                                 |   |
+|   |  - Overview / KPIs       - Test Catalog          - Regression Suite (Live Log)  |   |
+|   |  - HTML5 Waveform Canvas - Log Inspector         - Markdown / JSON Reports      |   |
+|   |  - Defect Injection Lab  - System Health         - GTKWave Launcher Button      |   |
+|   +---------------------------------------------------------------------------------+   |
+|                                            |                                            |
+|                                  HTTP REST / SSE Stream                                 |
+|                                            v                                            |
+|   +---------------------------------------------------------------------------------+   |
+|   |                APPLICATION BACKEND (scripts/dashboard_server.py)                |   |
+|   |                                                                                 |   |
+|   |  - ThreadingHTTPServer (Zero external Python packages, pure Standard Library)   |   |
+|   |  - Thread-Safe Execution Manager & Background Job Queues                        |   |
+|   |  - Real-time VCD Waveform Parser (Signals, Buses, Transitions)                  |   |
+|   |  - Process Launcher & Subprocess Watchdog (Timeout & Memory Protection)         |   |
+|   |  - Strict Input Sanitization & Allowlisted Defect Macros                        |   |
+|   +---------------------------------------------------------------------------------+   |
+|                                            |                                            |
+|                                     Subprocess API                                      |
+|                                            v                                            |
+|   +---------------------------------------------------------------------------------+   |
+|   |            VERIFICATION AUTOMATION ENGINE (scripts/regression.py)               |   |
+|   |                                                                                 |   |
+|   |  - Icarus Verilog Compiler & Simulator Pipeline (`iverilog` / `vvp`)            |   |
+|   |  - Plusarg Injection (+TESTNAME=, +SEED=, +DUMP_WAVE=)                          |   |
+|   |  - Log Scraping & Scoreboard Accounting                                         |   |
+|   |  - Artifact Generation (JSON, CSV, Markdown, VCD)                               |   |
+|   +---------------------------------------------------------------------------------+   |
+|                                            |                                            |
+|                                     Compiled Binary                                     |
+|                                            v                                            |
+|   +---------------------------------------------------------------------------------+   |
+|   |                       HARDWARE SIMULATION RUNTIME (Icarus vvp)                  |   |
+|   |                                                                                 |   |
+|   |  DUT: rtl/sync_fifo.sv                                                          |   |
+|   |  TB:  tb/tb_top.sv, driver.sv, monitor.sv, scoreboard.sv, assertions.sv         |   |
+|   |  STIM: tests/test_*.sv (10 Comprehensive Verification Scenarios)                |   |
+|   +---------------------------------------------------------------------------------+   |
 +-----------------------------------------------------------------------------------------+
-                                           ^
-                                           |
-                       +---------------------------------------+
-                       |       Python 3 Regression Engine      |
-                       |  (scripts/run_test.py, regression.py) |
-                       +---------------------------------------+
-                                           ^
-                                           |
-                       +---------------------------------------+
-                       |       Makefile & GitHub Actions CI    |
-                       +---------------------------------------+
 ```
-
-### Component Roles
-1. **DUT (`rtl/sync_fifo.sv`)**: Dual-port synchronous FIFO with circular write/read pointers, fill counter, threshold comparators, and error flag generation.
-2. **Driver (`tb/fifo_driver.sv`)**: Active stimulus driver executing cycle-accurate reset, single writes, single reads, continuous back-to-back bursts, and simultaneous transactions.
-3. **Monitor (`tb/fifo_monitor.sv`)**: Passive bus monitor observing transactions at clock boundaries and forwarding transactions to the scoreboard.
-4. **Scoreboard (`tb/fifo_scoreboard.sv`)**: Independent reference model containing a golden reference queue (`logic [DATA_WIDTH-1:0] ref_queue[$]`). Computes expected occupancy and flags independently from the DUT's internal pointers.
-5. **Assertions (`tb/fifo_assertions.sv`)**: SVA immediate and procedural assertions evaluating safety invariants (e.g. mutual exclusion of `full` and `empty`, count bounds, protocol error flag timing).
-6. **Top Harness (`tb/tb_top.sv`)**: Wires all modules, generates a 100MHz clock, dispatches tests based on plusargs (`+TESTNAME=`), arms a 50,000-cycle watchdog timer, and terminates with standard exit codes via `$finish(0)` on pass or `$fatal(1)` on error.
 
 ---
 
-## 3. Repository Structure
+## 3. Technology Stack & Justification
+
+| Layer | Technology | Version | Architectural Rationale |
+| :--- | :--- | :--- | :--- |
+| **Primary UI** | Vanilla HTML5 / CSS3 / ES6 | Modern Browser | Maximum responsiveness, zero build steps (`npm`/`node` free), dark EDA studio aesthetic, instant loading. |
+| **Waveform Canvas** | HTML5 2D Canvas API | Native Browser | Zero-dependency digital timing diagram rendering with pan, zoom, signal labels, and timestamp cursors. |
+| **Application Server** | Python `http.server.ThreadingHTTPServer` | Python 3.9+ | Built strictly on the Python Standard Library. Zero `pip` dependencies; runs instantly in clean environments. |
+| **Process Control** | Python `subprocess` & `threading` | Python 3 Standard | Thread-safe background execution, asynchronous SSE log streaming, and deterministic process isolation. |
+| **HDL Simulator** | Icarus Verilog (`iverilog` / `vvp`) | v13.0+ | IEEE 1364-2005 / SystemVerilog 2012 open-source standard simulator with VCD dumping and plusarg support. |
+| **Desktop Waveform Viewer** | GTKWave | v3.3+ | Full-featured digital waveform inspection tool for deep hierarchy debugging, launched via dashboard button. |
+| **Continuous Integration** | GitHub Actions | Ubuntu 22.04 | Automated regression validation on push and pull requests with build artifact retention. |
+
+---
+
+## 4. Prerequisites
+
+The framework runs out-of-the-box on **macOS (Apple Silicon & Intel)** and **Linux (Ubuntu/Debian)**:
+
+1. **Python 3.9+** (Standard library only; zero pip installations needed).
+2. **Icarus Verilog (`iverilog` and `vvp`)**:
+   - **macOS**: `brew install icarus-verilog`
+   - **Ubuntu/Debian**: `sudo apt-get install iverilog`
+3. *(Optional)* **GTKWave**:
+   - **macOS**: `brew install --cask gtkwave`
+   - **Ubuntu/Debian**: `sudo apt-get install gtkwave`
+
+---
+
+## 5. One-Click Dashboard Launch
+
+To launch the Verification Studio, use any of the three provided launcher methods:
+
+### Method A: macOS Finder Double-Click (Zero Terminal)
+In macOS Finder, locate the project folder and double-click:
+```text
+Launch_Dashboard.command
+```
+This automatically starts the local dashboard server and opens `http://127.0.0.1:8080` in your default browser.
+
+### Method B: Executable Script
+```bash
+./launch_dashboard.sh
+```
+
+### Method C: Standard Make Target
+```bash
+make dashboard
+```
+
+> [!NOTE]
+> The server automatically selects port `8080` (or the next available port if `8080` is in use) and binds strictly to `127.0.0.1` for local safety.
+
+---
+
+## 6. Dashboard Control Surface Guide
+
+The dashboard is structured into 8 intuitive navigation panels:
+
+### Panel 1: Overview & KPI Summary
+- **System Health Indicator**: Displays simulator availability (`Icarus Verilog 13.0`), runtime engine status, and project root path.
+- **KPI Metrics**: Real-time counters showing total tests (10), latest pass rate (100%), duration, and hardware parameter summary (Width: 8, Depth: 16).
+- **Quick Action Bar**: One-click triggers for **Run Full Regression**, **Run Defect Demo**, and **Inspect Waveforms**.
+- **Recent Results Table**: Live breakdown of the most recent execution with test-by-test status indicators.
+
+### Panel 2: Test Catalog
+- Lists all 10 verification scenarios across 5 engineering categories:
+  - **Directed / Functional**: `test_single_write_read`, `test_burst_write_read`
+  - **Boundary / Capacity**: `test_fifo_full`, `test_fifo_empty`, `test_almost_flags`
+  - **Corner Case**: `test_simultaneous_rw`
+  - **Robustness / Protocol**: `test_overflow`, `test_underflow`
+  - **Stress & Reset**: `test_reset`, `test_random_traffic`
+- Each card displays verification purpose, stimulus description, and an interactive **Configure & Run** modal allowing custom random seeds, waveform dumping, and compile-time defect defines.
+
+### Panel 3: Regression Suite & Live Streaming
+- **Batch Regression Launcher**: Executes the complete 10-test suite sequentially.
+- **Live Progress Bar**: Displays real-time test count, percentage completion, and current active simulation.
+- **Streaming Terminal Window**: Real-time Server-Sent Events (SSE) output showing simulation logs, scoreboard checkpoints, and SVA evaluations.
+- **Results Matrix**: Granular metrics for each test, including duration, data mismatches, state errors, and SVA failure count.
+
+### Panel 4: Waveform Debugger
+- **In-Browser Digital Logic Canvas**: Select any completed test with waveform dumping enabled to render interactive digital traces for:
+  - `clk` (System clock)
+  - `rst_n` (Active-low asynchronous reset)
+  - `wr_en` / `rd_en` (Write & read strobe lines)
+  - `wr_data` / `rd_data` (8-bit hex bus transactions)
+  - `full` / `empty` (Primary status flags)
+  - `almost_full` / `almost_empty` (Watermark thresholds)
+  - `overflow` / `underflow` (Protocol error pulses)
+  - `count` (FIFO occupancy level)
+- **Interactive Controls**: Zoom In (+), Zoom Out (-), Reset View, and click anywhere to place a timestamp measurement cursor.
+- **Native GTKWave Launcher**: Click **Launch GTKWave** to launch the native desktop viewer with the generated `.vcd` file.
+
+### Panel 5: Log Inspector
+- Searchable, syntax-highlighted simulation logs for every test case.
+- Filter by test name or search for specific substrings (e.g. `SCOREBOARD`, `ASSERTION`, `MISMATCH`).
+- Download individual `.log` files directly to your workstation.
+
+### Panel 6: Reports & Export
+- **Live Markdown Report**: Formatted regression report with executive summary, configuration parameters, and detailed test tables.
+- **Export Raw Data**: Instant download links for `regression_summary.json` and `regression_summary.csv` for downstream CI/CD ingestion or spreadsheet analysis.
+
+### Panel 7: Defect-Injection Verification Lab
+- Interactive proof of verification harness effectiveness.
+- Select from 5 real-world hardware defect macros and execute the guided 3-stage validation cycle.
+
+### Panel 8: System Health & Diagnostics
+- Toolchain validation showing detected paths for `iverilog`, `vvp`, `gtkwave`, and Python runtime.
+- One-click workspace cache cleaner to purge stale `.vvp`, `.log`, and `.vcd` files.
+
+---
+
+## 7. In-Browser Waveform Visualization vs GTKWave
+
+The dashboard provides a dual-mode waveform workflow:
+
+| Feature | In-Browser HTML5 Canvas | Native GTKWave Application |
+| :--- | :--- | :--- |
+| **Primary Use Case** | Instant triage, quick visual verification, presentation | Deep multi-module debug, custom signal groups, analog filters |
+| **Setup Required** | None (Built into the web interface) | GTKWave installed locally |
+| **Supported Formats** | Value Change Dump (`.vcd`) via REST parser | `.vcd`, `.fst`, `.ghw` |
+| **Interactive Features** | Click-to-measure cursor, zoom, bus hex display | Advanced marker mathematics, differential cursors, transaction zooming |
+| **Launch Mechanism** | Automatic upon selecting test in Waveforms panel | Click **"Launch in Desktop GTKWave"** button in UI |
+
+---
+
+## 8. Defect-Injection Demonstration Workflow
+
+To prove that verification checks are genuinely catching hardware bugs (and not passing vacuously), the framework includes a deterministic defect injection laboratory:
 
 ```
-.
++-----------------------------------------------------------------------------------------+
+|                                 DEFECT INJECTION LIFECYCLE                              |
+|                                                                                         |
+|   [STAGE 1: DEFECT INJECTION]                                                           |
+|   - Select defect macro (e.g. BUG_INJECT_OVERFLOW)                                      |
+|   - Recompile RTL with `+define+BUG_INJECT_OVERFLOW`                                    |
+|   - Run regression suite                                                                |
+|   - EXPECTED OUTCOME: FAIL (Caught by `test_overflow` & `test_random_traffic`)          |
+|                                            |                                            |
+|                                            v                                            |
+|   [STAGE 2: RESTORE CLEAN BASELINE]                                                     |
+|   - Purge defect macro define                                                           |
+|   - Recompile golden RTL (`sync_fifo.sv`)                                               |
+|                                            |                                            |
+|                                            v                                            |
+|   [STAGE 3: CLEAN VERIFICATION PASS]                                                    |
+|   - Re-run full regression suite                                                        |
+|   - EXPECTED OUTCOME: PASS (10/10 Passed, 0 Errors, 100% Pass Rate)                     |
++-----------------------------------------------------------------------------------------+
+```
+
+### Available Defect Injections
+1. `BUG_INJECT_OVERFLOW`: Disables write protection when full; memory is overwritten and overflow error is masked. *(Detected by `test_overflow`, `test_random_traffic`)*
+2. `BUG_INJECT_UNDERFLOW_FLAG`: Suppresses underflow error flag generation on illegal reads when empty. *(Detected by `test_underflow`)*
+3. `BUG_INJECT_COUNT_SIMULTANEOUS`: Erroneously increments fill counter on concurrent read/write when full. *(Detected by `test_simultaneous_rw`)*
+4. `BUG_INJECT_ALMOST_FULL`: Inverts the threshold comparison logic for almost-full detection. *(Detected by `test_almost_flags`)*
+5. `BUG_INJECT_RESET_NEGLECT`: Fails to clear error flags during reset deassertion. *(Detected by `test_reset`)*
+
+---
+
+## 9. Continuous Integration (GitHub Actions)
+
+The framework includes a production CI pipeline defined in [`.github/workflows/regression.yml`](file:///.github/workflows/regression.yml):
+
+- **Environment**: Ubuntu 22.04 LTS
+- **Triggers**: Every `push` to `main` and all `pull_request` events.
+- **Workflow**:
+  1. Installs Icarus Verilog (`sudo apt-get install iverilog`).
+  2. Executes the full regression suite via `python3 scripts/regression.py`.
+  3. Verifies that all 10 tests pass with exit code `0`.
+  4. Runs the defect-injection pipeline with `BUG_INJECT_OVERFLOW` to verify that CI correctly identifies hardware bugs and rejects broken builds.
+  5. Publishes machine-readable summaries (`regression_summary.json`, `regression_summary.csv`, `regression_report.md`) as downloadable build artifacts.
+
+---
+
+## 10. Repository File Inventory
+
+```
+rtl-verification-regression/
+├── Launch_Dashboard.command     # macOS Desktop Finder double-clickable launcher
+├── launch_dashboard.sh          # Shell one-click launcher for macOS and Linux
+├── Makefile                     # Top-level commands (make dashboard, make test, make clean)
+├── requirements.txt             # Environment declaration (Standard Library only)
+├── README.md                    # Authoritative user guide and project documentation
+│
+├── dashboard/                   # Interactive Web Studio Frontend
+│   ├── index.html               # Semantic HTML5 layout with 8 operational panels
+│   ├── css/
+│   │   └── style.css            # Dark-mode EDA studio theme with responsive grid & badges
+│   └── js/
+│       ├── app.js               # Core frontend controller, REST API calls, SSE streaming
+│       └── waveform_viewer.js   # In-browser HTML5 2D Canvas digital timing diagram renderer
+│
 ├── rtl/
-│   └── sync_fifo.sv             # Parameterized Synchronous FIFO RTL (with defect injection hooks)
+│   └── sync_fifo.sv             # Parameterized Synchronous FIFO with compile-time bug hooks
+│
 ├── tb/
-│   ├── fifo_pkg.sv              # Package: Transaction types, enums, logging utilities
-│   ├── fifo_driver.sv           # Active stimulus driver (cycle-accurate pin driving)
+│   ├── fifo_pkg.sv              # Verification package, transaction structs, logging macros
+│   ├── fifo_driver.sv           # Active stimulus driver (write, read, burst, reset)
 │   ├── fifo_monitor.sv          # Passive transaction monitor
-│   ├── fifo_scoreboard.sv       # Independent golden reference model & data comparator
-│   ├── fifo_assertions.sv      # SystemVerilog safety assertions (protocol & flags)
-│   └── tb_top.sv                # Top-level harness, plusarg dispatcher, watchdog timer
-├── tests/
-│   ├── test_base.sv             # Base test helpers and formatted banners
-│   ├── test_reset.sv            # Test 1: Reset behavior, illegal ops during reset, recovery
-│   ├── test_single_write_read.sv# Test 2: Single word write followed by single read
-│   ├── test_burst_write_read.sv # Test 3: Back-to-back burst write followed by burst read
-│   ├── test_fifo_full.sv        # Test 4: Fill to capacity (DEPTH=16), check full flag & recovery
-│   ├── test_fifo_empty.sv       # Test 5: Drain sequence and empty flag timing/stability
+│   ├── fifo_scoreboard.sv       # Golden reference queue model & bitwise comparator
+│   ├── fifo_assertions.sv      # SystemVerilog Assertions (SVA) for safety invariants
+│   └── tb_top.sv                # Top harness, clock generator, test plusarg dispatcher
+│
+├── tests/                       # 10 Verification Test Cases
+│   ├── test_base.sv             # Base test tasks and common verification helpers
+│   ├── test_reset.sv            # Test 1: Reset behavior and register initialization
+│   ├── test_single_write_read.sv# Test 2: Single word write followed by read
+│   ├── test_burst_write_read.sv # Test 3: Burst write and burst read sequence
+│   ├── test_fifo_full.sv        # Test 4: Capacity limit and full flag assertion
+│   ├── test_fifo_empty.sv       # Test 5: Drain sequence and empty flag assertion
 │   ├── test_simultaneous_rw.sv  # Test 6: Concurrent read and write at partial & full fill
-│   ├── test_overflow.sv         # Test 7: Illegal write on full, overflow flag & data protection
-│   ├── test_underflow.sv        # Test 8: Illegal read on empty, underflow flag & recovery
+│   ├── test_overflow.sv         # Test 7: Overflow attempt and memory non-corruption
+│   ├── test_underflow.sv        # Test 8: Underflow attempt and error flag generation
 │   ├── test_almost_flags.sv     # Test 9: Watermark threshold crossing verification
 │   └── test_random_traffic.sv   # Test 10: Constrained random stimulus with seed control
-├── scripts/
+│
+├── scripts/                     # Backend API & Automation Engine
+│   ├── dashboard_server.py      # Multi-threaded REST API server, SSE log streamer, VCD parser
 │   ├── run_test.py              # Single test runner, log capture, timeout, exit codes
 │   ├── regression.py            # Regression orchestrator, JSON/CSV/Markdown reports
 │   └── generate_report.py       # Standalone report generator from simulation logs
-├── docs/
+│
+├── docs/                        # Engineering Documentation
+│   ├── architecture.md          # Full-stack system architecture, dataflow, security model
 │   ├── dut_specification.md     # Hardware specification for sync_fifo
 │   ├── verification_plan.md     # Test matrix, SVA taxonomy, sign-off criteria
-│   ├── architecture.md          # Architecture and execution methodology
 │   └── troubleshooting.md       # Diagnostic guide for local simulation & tooling
+│
 ├── sim/                         # Simulation build artifacts (.vvp binaries)
 ├── reports/                     # Machine-readable summaries and human-readable reports
-│   └── logs/                    # Individual test run execution logs
-├── waves/                       # Value Change Dump (.vcd) waveform files for GTKWave
-├── .github/
-│   └── workflows/
-│       └── regression.yml       # Continuous Integration workflow (Ubuntu + iverilog)
-├── Makefile                     # Top-level command orchestration
-├── requirements.txt             # Python environment specification (zero external deps)
-├── .gitignore                   # Version control ignore rules
-└── README.md                    # This documentation
+│   └── logs/                    # Individual test execution logs
+├── waves/                       # Value Change Dump (.vcd) waveform files
+└── .github/
+    └── workflows/
+        └── regression.yml       # GitHub Actions CI workflow
 ```
 
 ---
 
-## 4. Technology Stack & Justification
+## 11. Developer & CI CLI Reference
 
-| Tool / Technology | Version / Requirement | Role | Engineering Rationale |
-| :--- | :--- | :--- | :--- |
-| **SystemVerilog** | IEEE 1800-2012 (`-g2012`) | RTL & Testbench | Industry-standard language for digital design and hardware verification. |
-| **Icarus Verilog (`iverilog`)** | `13.0` (stable) | Simulator Compiler | High-performance, open-source Verilog/SystemVerilog compiler available on macOS and Linux. |
-| **Icarus Runtime (`vvp`)** | `13.0` (stable) | Simulation Engine | Executes compiled `.vvp` simulation binaries with runtime plusarg support. |
-| **Python 3** | $\ge 3.8$ (Standard Library) | Automation & Regression | Cross-platform automation without external dependencies (`argparse`, `subprocess`, `json`, `csv`, `pathlib`). |
-| **GTKWave** | Any modern version | Waveform Viewer | Standard open-source waveform inspection tool for `.vcd` files. |
-| **Make** | GNU Make $\ge 3.81$ | Command Orchestration | Universal interface for reproducible compilation and test runs. |
-| **GitHub Actions** | Ubuntu Latest | Continuous Integration | Verifies pull requests and commits in a clean Linux container. |
-
----
-
-## 5. Prerequisites
-
-### macOS (Apple Silicon or Intel)
-1. **Homebrew**: Package manager for installing EDA tools.
-2. **Icarus Verilog**:
-   ```bash
-   brew install icarus-verilog
-   ```
-3. **Python 3**: Standard macOS Python (`/usr/bin/python3`) or Homebrew Python.
-4. **GTKWave** (Optional, for waveform inspection):
-   ```bash
-   brew install --cask gtkwave
-   ```
-
-### Linux (Ubuntu / Debian)
-```bash
-sudo apt-get update && sudo apt-get install -y iverilog python3 make
-```
-
----
-
-## 6. Installation & Setup
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/<your-username>/rtl-verification-regression.git
-   cd rtl-verification-regression
-   ```
-
-2. **Verify toolchain availability**:
-   ```bash
-   iverilog -V | head -n 2
-   vvp -V | head -n 2
-   python3 --version
-   ```
-   *(On macOS Apple Silicon, ensure `/opt/homebrew/bin` is in your `PATH`)*.
-
-3. **Check available Make targets**:
-   ```bash
-   make help
-   ```
-
----
-
-## 7. Running an Individual Test
-
-Run any of the 10 verification test cases using `make test` or `python3 scripts/run_test.py`:
+For automated build pipelines, headless servers, and CI environments, the underlying Python scripts and Makefile remain fully functional:
 
 ```bash
-# Run test_burst_write_read
+# Launch Dashboard (Recommended normal workflow)
+make dashboard
+
+# Compile simulation binary
+make compile
+
+# Run single test in terminal
 make test TEST=test_burst_write_read
+make test TEST=test_random_traffic SEED=1234 WAVE=1
 
-# Run with waveform generation enabled (VCD output saved to waves/)
-make test TEST=test_burst_write_read WAVE=1
-
-# Run with custom pseudo-random seed
-make test TEST=test_random_traffic SEED=12345
-```
-
-### Direct Python Invocation
-```bash
-python3 scripts/run_test.py --test test_single_write_read --wave
-```
-
-### Expected Output
-```text
-[RUN] Executing test_burst_write_read (Seed: 42, Wave: False)...
-[PASS] test_burst_write_read (0.008s) - Test PASSED
-[LOG] Log saved to /Users/.../reports/logs/test_burst_write_read.log
-```
-
----
-
-## 8. Running the Full Automated Regression Suite
-
-Execute all 10 verification test cases in sequence, aggregate results, and generate reports:
-
-```bash
+# Run full headless regression
 make regression
-```
-Or directly:
-```bash
-python3 scripts/regression.py
-```
 
-### Terminal Dashboard Output
-```text
-[REGRESSION START] Discovered 10 tests for regression suite.
-[COMPILATION] Compiling RTL and testbench suite...
-[COMPILATION OK] Simulation binary ready: sim/tb_top_clean.vvp
-  [1/10] Running test_almost_flags... PASS (0.009s)
-  [2/10] Running test_burst_write_read... PASS (0.008s)
-  [3/10] Running test_fifo_empty... PASS (0.008s)
-  [4/10] Running test_fifo_full... PASS (0.009s)
-  [5/10] Running test_overflow... PASS (0.009s)
-  [6/10] Running test_random_traffic... PASS (0.011s)
-  [7/10] Running test_reset... PASS (0.008s)
-  [8/10] Running test_simultaneous_rw... PASS (0.009s)
-  [9/10] Running test_single_write_read... PASS (0.008s)
-  [10/10] Running test_underflow... PASS (0.008s)
-
-===============================================================================================
-                 SYNCHRONOUS FIFO REGRESSION EXECUTION DASHBOARD
-===============================================================================================
-Test Identifier              | Status   | Time (s)   | Mismatches | Details                  
------------------------------------------------------------------------------------------------
-test_almost_flags            | PASS     | 0.009      | 0          | PASSED                   
-test_burst_write_read        | PASS     | 0.008      | 0          | PASSED                   
-test_fifo_empty              | PASS     | 0.008      | 0          | PASSED                   
-test_fifo_full               | PASS     | 0.009      | 0          | PASSED                   
-test_overflow                | PASS     | 0.009      | 0          | PASSED                   
-test_random_traffic          | PASS     | 0.011      | 0          | PASSED                   
-test_reset                   | PASS     | 0.008      | 0          | PASSED                   
-test_simultaneous_rw         | PASS     | 0.009      | 0          | PASSED                   
-test_single_write_read       | PASS     | 0.008      | 0          | PASSED                   
-test_underflow               | PASS     | 0.008      | 0          | PASSED                   
------------------------------------------------------------------------------------------------
-Total Tests: 10  |  Passed: 10  |  Failed: 0  |  Pass Rate: 100.0%  |  Duration: 0.091s
-Overall Regression Status: PASSED
-===============================================================================================
-
-[REPORTS] JSON Summary : reports/regression_summary.json
-[REPORTS] CSV Summary  : reports/regression_summary.csv
-[REPORTS] Markdown     : reports/regression_report.md
-```
-
----
-
-## 9. Waveform Inspection with GTKWave
-
-### 1. Generating Waveforms
-Waveforms are dumped in standard Value Change Dump (`.vcd`) format when `+DUMP_WAVE=1` is passed or `WAVE=1` is specified:
-```bash
-make test TEST=test_simultaneous_rw WAVE=1
-```
-The file is generated at: `waves/test_simultaneous_rw.vcd`.
-
-### 2. Opening in GTKWave
-```bash
-make wave TEST=test_simultaneous_rw
-```
-Or directly:
-```bash
-gtkwave waves/test_simultaneous_rw.vcd
-```
-*(On macOS, you can also use `open -a gtkwave waves/test_simultaneous_rw.vcd`)*.
-
-### 3. Recommended Signals to Inspect
-Add the following signals from `tb_top.dut` to the waveform viewer:
-- **System**: `clk`, `rst_n`
-- **Write Channel**: `wr_en`, `wr_data[7:0]`, `full`, `overflow`
-- **Read Channel**: `rd_en`, `rd_data[7:0]`, `empty`, `underflow`
-- **State & Watermarks**: `count[4:0]`, `almost_full`, `almost_empty`
-- **Internal Storage**: `wr_ptr[3:0]`, `rd_ptr[3:0]`
-
----
-
-## 10. Understanding Reports & Metrics
-
-Each regression run automatically generates three report artifacts:
-
-### 1. Machine-Readable JSON (`reports/regression_summary.json`)
-Contains complete metadata, runtime configuration, per-test timing, and error classification:
-```json
-{
-  "timestamp": "2026-09-19T00:39:01.058925+00:00",
-  "configuration": {
-    "simulator": "Icarus Verilog 13.0 (vvp)",
-    "dut": "sync_fifo",
-    "seed": 42,
-    "wave_dump": false,
-    "bug_macro": null
-  },
-  "summary": {
-    "total_tests": 10,
-    "passed": 10,
-    "failed": 0,
-    "pass_rate": "100.0%",
-    "total_duration_sec": 0.091,
-    "overall_status": "PASSED"
-  },
-  "test_results": [
-    {
-      "test_name": "test_burst_write_read",
-      "passed": true,
-      "status": "PASS",
-      "duration_sec": 0.008,
-      "data_mismatches": 0,
-      "state_errors": 0,
-      "assertion_failures": 0,
-      "exit_code": 0,
-      "details": "PASSED",
-      "log_path": "reports/logs/test_burst_write_read.log"
-    }
-  ]
-}
-```
-
-### 2. Machine-Readable CSV (`reports/regression_summary.csv`)
-Easily ingestible into CI dashboards, spreadsheets, or automated parsing pipelines:
-```csv
-Test Name,Status,Duration (s),Data Mismatches,State Errors,Assertion Failures,Details,Log File
-test_almost_flags,PASS,0.0090,0,0,0,PASSED,reports/logs/test_almost_flags.log
-test_burst_write_read,PASS,0.0080,0,0,0,PASSED,reports/logs/test_burst_write_read.log
-...
-```
-
-### 3. Human-Readable Markdown (`reports/regression_report.md`)
-Formatted for GitHub PR comments or documentation archiving, displaying summary metrics and tabular test breakdowns.
-
----
-
-## 11. Defect-Injection Verification (Mandatory Demo)
-
-A verification framework is only as credible as its ability to catch genuine design defects. This environment provides built-in compile-time defect injection macros in `rtl/sync_fifo.sv`:
-
-| Defect Injection Macro | Injected Bug Mechanism | Expected Test Failures |
-| :--- | :--- | :--- |
-| `BUG_INJECT_OVERFLOW` | Disables overflow protection: allows writes to proceed when full, corrupting memory array. | `test_overflow` (5 data mismatches) & `test_random_traffic` (43 mismatches). |
-| `BUG_INJECT_UNDERFLOW_FLAG` | Suppresses `underflow` error flag generation on illegal reads when empty. | `test_underflow` (5 assertion failures). |
-| `BUG_INJECT_COUNT_SIMULTANEOUS` | Miscalculates occupancy during simultaneous read/write when full (increments past `DEPTH`). | `test_simultaneous_rw` (SVA `A_COUNT_LIMIT` violation). |
-| `BUG_INJECT_ALMOST_FULL` | Uses `<` instead of `>=` for watermark calculation. | `test_almost_flags` (watermark state mismatches). |
-
-### Reproducible Bug-Injection Demonstration
-
-#### Step 1: Run Clean Regression (All 10 Pass)
-```bash
-make regression
-```
-Result: **`10 Passed, 0 Failed, Exit Code 0`**.
-
-#### Step 2: Inject Overflow Defect (`BUG_INJECT_OVERFLOW`)
-```bash
+# Run regression with injected defect
 make regression-bug BUG=BUG_INJECT_OVERFLOW
-```
-Result: **`8 Passed, 2 Failed, Exit Code 1`**.
-```text
-  [5/10] Running test_overflow... FAIL (0.014s)
-  [6/10] Running test_random_traffic... FAIL (0.022s)
 
-Test Identifier        | Status | Mismatches | Details
----------------------------------------------------------------------
-test_overflow          | FAIL   | 5          | 5 data mismatch(es)
-test_random_traffic    | FAIL   | 43         | 43 data mismatch(es)
----------------------------------------------------------------------
-Overall Regression Status: FAILED
-```
+# Open waveform in desktop GTKWave
+make wave TEST=test_burst_write_read
 
-#### Step 3: Inject Underflow Flag Defect (`BUG_INJECT_UNDERFLOW_FLAG`)
-```bash
-make regression-bug BUG=BUG_INJECT_UNDERFLOW_FLAG
-```
-Result: **`9 Passed, 1 Failed, Exit Code 1`**.
-```text
-  [10/10] Running test_underflow... FAIL (0.008s)
+# View latest summary report
+make report
 
-Test Identifier        | Status | Mismatches | Details
----------------------------------------------------------------------
-test_underflow         | FAIL   | 0          | 5 assertion failure(s)
----------------------------------------------------------------------
-Overall Regression Status: FAILED
+# Clean all generated artifacts
+make clean
 ```
-
-#### Step 4: Restore Clean Baseline
-```bash
-make regression
-```
-Result: **`10 Passed, 0 Failed, Exit Code 0`**.
 
 ---
 
-## 12. Continuous Integration (GitHub Actions)
+## 12. Troubleshooting Guide
 
-The repository includes a production-ready CI workflow located at [`.github/workflows/regression.yml`](.github/workflows/regression.yml).
+### Dashboard Fails to Bind Port 8080
+- **Cause**: Another service is utilizing port `8080`.
+- **Solution**: The dashboard server automatically probes ports `8080..8180` and binds to the first available free port. Alternatively, specify a custom port:
+  ```bash
+  python3 scripts/dashboard_server.py --port 9090
+  ```
 
-### CI Workflow Stages
-1. **Runner Setup**: Spawns an `ubuntu-latest` virtual environment with Python 3.11.
-2. **Toolchain Installation**: Installs `iverilog` via `apt-get` and performs version checks.
-3. **Clean Regression**: Executes `make regression` and verifies that all 10 tests pass.
-4. **Defect-Injection Validation**:
-   - Executes `python3 scripts/regression.py --bug BUG_INJECT_OVERFLOW`.
-   - Confirms that the runner returns a non-zero exit code (defects are caught).
-   - Executes `python3 scripts/regression.py --bug BUG_INJECT_UNDERFLOW_FLAG`.
-   - Confirms that assertion failures correctly fail the run.
-5. **Artifact Publishing**: Uploads `reports/regression_summary.json`, `reports/regression_summary.csv`, `reports/regression_report.md`, and all individual test logs (`reports/logs/*.log`) as downloadable workflow artifacts.
+### Icarus Verilog (`iverilog`) Not Found
+- **macOS**: Ensure `/opt/homebrew/bin` is in your `PATH`. Verify with `which iverilog`.
+- **Dashboard Action**: Navigate to the **System Health** panel in the dashboard to inspect the current environment paths.
 
----
-
-## 13. Verification Methodology
-
-### 1. Independent Golden Reference Model
-To avoid mirror-imaging bugs present in the RTL, the scoreboard maintains a dedicated SystemVerilog queue (`logic [DATA_WIDTH-1:0] ref_queue[$]`).
-- When the write monitor observes `wr_en && (!full || rd_en)`, the data is pushed to the golden queue.
-- When the read monitor observes `rd_en && !empty`, the golden queue pops the front word.
-- The actual `rd_data` from the DUT is compared bit-for-bit against the popped reference word.
-- Mismatches immediately trigger an error log with expected vs actual values, simulation time, and queue size.
-
-### 2. SystemVerilog Assertions (SVA)
-Assertions run continuously on every clock edge:
-- **`A_RESET_STATE`**: Confirms that when `rst_n == 0`, `empty=1`, `full=0`, `count=0`, `overflow=0`, `underflow=0`.
-- **`A_MUTEX_FULL_EMPTY`**: Invariant ensuring `!(full && empty)` holds unconditionally.
-- **`A_COUNT_LIMIT`**: Bounds check ensuring `count <= DEPTH`.
-- **`A_OVERFLOW_PROTOCOL`**: Asserts that an illegal write attempt while full without concurrent read triggers `overflow`.
-- **`A_UNDERFLOW_PROTOCOL`**: Asserts that an illegal read attempt while empty triggers `underflow`.
-- **`A_ALMOST_FULL_RULE`**: Verifies that `almost_full` asserts if and only if `count >= (DEPTH - ALMOST_FULL_THRESH)`.
-- **`A_ALMOST_EMPTY_RULE`**: Verifies that `almost_empty` asserts if and only if `count <= ALMOST_EMPTY_THRESH && !empty`.
+### In-Browser Waveform Canvas is Blank
+- **Cause**: The test was executed without waveform dumping enabled.
+- **Solution**: Click **Configure & Run** on the test card in the **Test Catalog**, check **Dump Waveforms (.vcd)**, and re-run the test.
 
 ---
 
-## 14. Limitations
+## 13. Process Safety & Security Boundaries
 
-This project is intentionally designed with a lightweight, zero-dependency stack. It explicitly does **NOT** include:
-- **Universal Verification Methodology (UVM)**: UVM requires proprietary EDA simulators (VCS, Questa, Xcelium) or heavy wrappers and is omitted in favor of lightweight, native SystemVerilog.
-- **Asynchronous Clock Domain Crossing (CDC)**: The DUT is a synchronous FIFO. Multi-clock Gray-code synchronization, 2-flop synchronizers, and formal CDC analysis are outside the scope of this single-clock design.
-- **Functional Coverage Groups (`covergroup`)**: Open-source Icarus Verilog does not currently support SystemVerilog `covergroup` and `coverpoint` constructs. Coverage is tracked via functional test matrix mapping and scoreboard checks.
+Because the dashboard server executes simulation processes locally, strict defensive programming practices are implemented:
+- **No Arbitrary Shell Execution**: The dashboard backend does not expose generic shell or command execution endpoints. All commands are constructed using discrete argument lists (`subprocess.run(["iverilog", ...])`).
+- **Strict Parameter Allowlisting**: Test names are matched against strict regex patterns (`^[a-zA-Z0-9_]+$`) and validated against discovered files in `tests/`. Defect macros are checked against an immutable allowlist (`VALID_BUG_MACROS`).
+- **Loopback Binding**: The dashboard binds exclusively to `127.0.0.1` (localhost), preventing unauthenticated access across local networks.
+- **Process Timeout Protection**: Individual simulations are protected by a 30-second watchdog timer to eliminate zombie processes from infinite simulation loops.
 
 ---
 
-## 15. Future Extensions
+## 14. Known Limitations & Sign-Off
 
-1. **Verilator Integration**: Adding Verilator linting and C++ testbench co-simulation for multi-million-cycle stress testing.
-2. **Asynchronous Dual-Clock FIFO**: Implementing Gray-code pointer CDC synchronization with Questa/ModelSim SVA concurrent sequences.
-3. **AXI4-Stream Protocol Adapter**: Wrapping the FIFO with standard `s_axis_tready/tvalid` and `m_axis_tvalid/tready` handshaking.
-4. **HTML Coverage Dashboard**: Extending `scripts/generate_report.py` to produce interactive HTML reports with collapsible logs.
+1. **Simulator Scope**: Built specifically for Icarus Verilog (`iverilog` / `vvp`). While the RTL and SystemVerilog testbench are standard IEEE 1800 compliant and portable to Synopsys VCS, Cadence Xcelium, or Siemens Questa, the compilation flags in `regression.py` default to `iverilog -g2012`.
+2. **Browser VCD Parsing Scale**: The in-browser waveform parser is optimized for focused unit test traces (up to 500,000 transitions). For multi-gigabyte traces from lengthy stress tests, use the one-click **Launch GTKWave** button.
+3. **Hardware Synthesis**: The repository contains simulation verification models; ASIC synthesis scripts (e.g. Synopsys Design Compiler) are outside the current project scope.
+
+---
+
+**RTL Verification & Automated Regression Studio** is verified and ready for production use.
+Launch the studio with `./launch_dashboard.sh` or double-click `Launch_Dashboard.command`!
