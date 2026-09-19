@@ -126,6 +126,7 @@ def run_single_test(
     cmd = [vvp_path, binary_path, f"+TESTNAME={test_name}", f"+SEED={seed}"]
     if dump_wave:
         cmd.append("+DUMP_WAVE=1")
+        (log_file.parent.parent.parent / "waves").mkdir(parents=True, exist_ok=True)
 
     log_file.parent.mkdir(parents=True, exist_ok=True)
     start_t = time.time()
