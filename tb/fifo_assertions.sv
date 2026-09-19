@@ -68,14 +68,14 @@ module fifo_assertions #(
 
         if (!rst_n) begin
             // 1. Reset Invariant: All status flags must settle to default values
-            A_RESET_FLAGS: assert (empty === 1'b1 && full === 1'b0 && count === '0)
+            assert (empty === 1'b1 && full === 1'b0 && count === '0)
                 else begin
                     assertion_failures++;
                     $error("*** ASSERTION FAILED [A_RESET_FLAGS]: empty=%0b (exp 1), full=%0b (exp 0), count=%0d (exp 0)",
                            empty, full, count);
                 end
 
-            A_RESET_ERROR_FLAGS: assert (overflow === 1'b0 && underflow === 1'b0)
+            assert (overflow === 1'b0 && underflow === 1'b0)
                 else begin
                     assertion_failures++;
                     $error("*** ASSERTION FAILED [A_RESET_ERROR_FLAGS]: overflow=%0b, underflow=%0b (both exp 0)",
@@ -83,35 +83,35 @@ module fifo_assertions #(
                 end
         end else begin
             // 2. Mutual Exclusion: FIFO cannot be simultaneously full and empty
-            A_MUTEX_FULL_EMPTY: assert (!(full && empty))
+            assert (!(full && empty))
                 else begin
                     assertion_failures++;
                     $error("*** ASSERTION FAILED [A_MUTEX_FULL_EMPTY]: full and empty are BOTH asserted simultaneously at count=%0d", count);
                 end
 
             // 3. Occupancy Upper Bound: count can never exceed configured DEPTH
-            A_COUNT_LIMIT: assert (int'(count) <= DEPTH)
+            assert (int'(count) <= DEPTH)
                 else begin
                     assertion_failures++;
                     $error("*** ASSERTION FAILED [A_COUNT_LIMIT]: count=%0d exceeds configured DEPTH=%0d", count, DEPTH);
                 end
 
             // 4. Full Flag Invariant: full must match (count == DEPTH)
-            A_FULL_FLAG_INVARIANT: assert (full === (int'(count) == DEPTH))
+            assert (full === (int'(count) == DEPTH))
                 else begin
                     assertion_failures++;
                     $error("*** ASSERTION FAILED [A_FULL_FLAG_INVARIANT]: full=%0b but count=%0d (DEPTH=%0d)", full, count, DEPTH);
                 end
 
             // 5. Empty Flag Invariant: empty must match (count == 0)
-            A_EMPTY_FLAG_INVARIANT: assert (empty === (int'(count) == 0))
+            assert (empty === (int'(count) == 0))
                 else begin
                     assertion_failures++;
                     $error("*** ASSERTION FAILED [A_EMPTY_FLAG_INVARIANT]: empty=%0b but count=%0d", empty, count);
                 end
 
             // 6. Almost Full Rule: almost_full must assert when count >= DEPTH - ALMOST_FULL_THRESH
-            A_ALMOST_FULL_RULE: assert (almost_full === (int'(count) >= (DEPTH - ALMOST_FULL_THRESH)))
+            assert (almost_full === (int'(count) >= (DEPTH - ALMOST_FULL_THRESH)))
                 else begin
                     assertion_failures++;
                     $error("*** ASSERTION FAILED [A_ALMOST_FULL_RULE]: almost_full=%0b with count=%0d (Threshold=%0d)",
@@ -119,7 +119,7 @@ module fifo_assertions #(
                 end
 
             // 7. Almost Empty Rule: almost_empty must assert when count <= ALMOST_EMPTY_THRESH && count > 0
-            A_ALMOST_EMPTY_RULE: assert (almost_empty === ((int'(count) <= ALMOST_EMPTY_THRESH) && (int'(count) > 0)))
+            assert (almost_empty === ((int'(count) <= ALMOST_EMPTY_THRESH) && (int'(count) > 0)))
                 else begin
                     assertion_failures++;
                     $error("*** ASSERTION FAILED [A_ALMOST_EMPTY_RULE]: almost_empty=%0b with count=%0d (Threshold=%0d)",
@@ -129,7 +129,7 @@ module fifo_assertions #(
             // 8. Overflow Protocol Assertion:
             // If illegal write was attempted on previous cycle (wr_en && full && !rd_en), overflow must pulse
             if (wr_en_d1 && full_d1 && !rd_en_d1) begin
-                A_OVERFLOW_PROTOCOL: assert (overflow === 1'b1)
+                assert (overflow === 1'b1)
                     else begin
                         assertion_failures++;
                         $error("*** ASSERTION FAILED [A_OVERFLOW_PROTOCOL]: overflow was not asserted following illegal write to full FIFO");
@@ -139,7 +139,7 @@ module fifo_assertions #(
             // 9. Underflow Protocol Assertion:
             // If illegal read was attempted on previous cycle (rd_en && empty), underflow must pulse
             if (rd_en_d1 && empty_d1) begin
-                A_UNDERFLOW_PROTOCOL: assert (underflow === 1'b1)
+                assert (underflow === 1'b1)
                     else begin
                         assertion_failures++;
                         $error("*** ASSERTION FAILED [A_UNDERFLOW_PROTOCOL]: underflow was not asserted following illegal read to empty FIFO");
