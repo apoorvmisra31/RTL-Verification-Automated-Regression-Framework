@@ -11,6 +11,8 @@ import fifo_pkg::*;
 
 module tb_top;
 
+    `include "fifo_logging.svh"
+
     // Testbench Parameters
     localparam int DATA_WIDTH          = 8;
     localparam int DEPTH               = 16;

@@ -20,6 +20,8 @@ module fifo_driver #(
     input  logic [DATA_WIDTH-1:0] rd_data
 );
 
+    `include "fifo_logging.svh"
+
     // Initial driver pin states (reset active at power-on)
     initial begin
         rst_n   = 1'b0;

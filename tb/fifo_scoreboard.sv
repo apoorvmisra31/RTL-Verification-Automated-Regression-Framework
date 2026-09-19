@@ -19,6 +19,8 @@ module fifo_scoreboard #(
     input logic rst_n
 );
 
+    `include "fifo_logging.svh"
+
     // Independent Golden Reference Model Queue
     logic [DATA_WIDTH-1:0] ref_queue[$];
 
