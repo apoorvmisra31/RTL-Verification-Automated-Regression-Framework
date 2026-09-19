@@ -38,6 +38,10 @@ task automatic run_test_overflow();
         if (dut.count !== 16) begin
             log_error($sformatf("Count changed on illegal write! count=%0d (exp 16)", dut.count));
         end
+        // On iteration i >= 1, the previous illegal write must have asserted overflow
+        if (i >= 1 && !dut.overflow) begin
+            log_error($sformatf("Overflow flag was NOT asserted on cycle %0d of illegal write!", i));
+        end
     end
 
     @(negedge clk);
@@ -46,9 +50,9 @@ task automatic run_test_overflow();
     @(posedge clk);
     #1ps;
 
-    // Verify overflow flag was asserted
-    if (!dut.overflow) begin
-        log_error("Overflow flag was NOT asserted after illegal writes to full FIFO!");
+    // Verify overflow flag deasserts once illegal writes stop
+    if (dut.overflow) begin
+        log_error("Overflow flag failed to deassert after illegal write stopped!");
     end
 
     driver.idle(3);

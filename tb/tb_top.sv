@@ -140,35 +140,6 @@ module tb_top;
     );
 
     //-------------------------------------------------------------------------
-    // Continuous Sampling & Golden Reference Updates
-    //-------------------------------------------------------------------------
-    // Capture state immediately prior to clock edge for write qualification
-    logic full_sample, empty_sample;
-    always @(posedge clk) begin
-        full_sample  <= full;
-        empty_sample <= empty;
-    end
-
-    always @(posedge clk) begin
-        if (rst_n) begin
-            #1ps; // Allow DUT non-blocking registers to update
-
-            // Forward valid write transaction to golden model
-            if (wr_en && (!full_sample || rd_en)) begin
-                scoreboard.write_sample(wr_data);
-            end
-
-            // Forward valid read transaction to scoreboard
-            if (rd_en && !empty_sample) begin
-                scoreboard.read_sample(rd_data);
-            end
-
-            // Verify comprehensive state and flags against independent model
-            scoreboard.check_state(full, empty, almost_full, almost_empty, count);
-        end
-    end
-
-    //-------------------------------------------------------------------------
     // Include Test Sequences
     //-------------------------------------------------------------------------
     `include "test_base.sv"
@@ -242,11 +213,15 @@ module tb_top;
         dispatch_test(test_name, seed);
 
         // Final verification check
-        total_test_errors = scoreboard.get_total_errors() + assertions.get_assertion_failures();
+        total_test_errors = scoreboard.get_total_errors() + assertions.get_assertion_failures() + fifo_pkg::get_pkg_error_count();
         if (total_test_errors == 0) begin
+            $display("[STATUS] All checks passed cleanly: Scoreboard errs=%0d, SVA fails=%0d, Logged errs=%0d.",
+                     scoreboard.get_total_errors(), assertions.get_assertion_failures(), fifo_pkg::get_pkg_error_count());
             $finish(0);
         end else begin
-            $fatal(1, $sformatf("Test '%s' failed with %0d detected verification error(s)", test_name, total_test_errors));
+            $fatal(1, $sformatf("Test '%s' failed with %0d error(s) [Scoreboard: %0d, SVA: %0d, Logged: %0d]",
+                                test_name, total_test_errors,
+                                scoreboard.get_total_errors(), assertions.get_assertion_failures(), fifo_pkg::get_pkg_error_count()));
         end
     end
 

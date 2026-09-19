@@ -8,7 +8,7 @@ The design features:
 - Independent write and read interfaces with handshake and status signaling.
 - High-watermark (`almost_full`) and low-watermark (`almost_empty`) early warning flags.
 - Real-time occupancy tracking (`count`).
-- Strict overflow and underflow protection with dedicated sticky error status flags.
+- Strict overflow and underflow protection with dedicated single-cycle pulse error status flags.
 - Support for concurrent read and write operations across empty, partial, and full fill states.
 - Clean compile-time defect-injection hooks for automated verification regression validation.
 

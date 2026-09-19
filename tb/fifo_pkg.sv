@@ -1,7 +1,7 @@
 //=============================================================================
 // Package: fifo_pkg
 // Description: Shared package providing types, transaction structures, logging
-//              utilities, and configuration for the sync_fifo testbench.
+//              utilities, error accounting, and configuration for sync_fifo TB.
 //=============================================================================
 
 `timescale 1ns / 1ps
@@ -26,6 +26,9 @@ package fifo_pkg;
         logic underflow_at_sample;
     } fifo_item_s;
 
+    // Global package-level error counter to ensure any logged error propagates
+    int pkg_error_count = 0;
+
     // Logging helpers with standardized prefix formatting
     function automatic void log_info(string msg);
         $display("[INFO]  [%0t ns] %s", $time, msg);
@@ -36,11 +39,21 @@ package fifo_pkg;
     endfunction
 
     function automatic void log_error(string msg);
+        pkg_error_count++;
         $display("*** ERROR: [%0t ns] %s", $time, msg);
     endfunction
 
     function automatic void log_fatal(string msg);
+        pkg_error_count++;
         $display("*** FATAL: [%0t ns] %s", $time, msg);
+    endfunction
+
+    function automatic int get_pkg_error_count();
+        return pkg_error_count;
+    endfunction
+
+    function automatic void reset_pkg_error_count();
+        pkg_error_count = 0;
     endfunction
 
 endpackage

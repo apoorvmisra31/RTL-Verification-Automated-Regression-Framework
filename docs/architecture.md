@@ -33,7 +33,10 @@ graph TD
         Iverilog[Icarus Verilog Compiler]
         VVP[VVP Simulation Runtime Engine]
         DUT[DUT: sync_fifo.sv]
-        TB[Testbench: Driver, Monitor, Scoreboard, SVA]
+        Driver[Active Stimulus Driver]
+        Monitor[Passive Transaction Monitor]
+        Scoreboard[Independent Golden Scoreboard]
+        SVA[SystemVerilog Immediate Assertions]
     end
 
     subgraph Artifacts ["Generated Artifact Storage"]
@@ -49,8 +52,11 @@ graph TD
     Regr --> Iverilog
     Runner --> Iverilog
     Iverilog -->|Compiles tb_top.vvp| VVP
-    VVP --> DUT
-    VVP --> TB
+    VVP --> Driver
+    Driver -->|Stimulus| DUT
+    DUT -->|Interface Signals| Monitor
+    Monitor -->|Observed Transactions| Scoreboard
+    DUT -->|Invariants| SVA
     VVP -->|Writes Execution Logs| Logs
     VVP -->|Writes Waveforms| Waves
     Regr --> Reporter
@@ -66,30 +72,53 @@ graph TD
 
 ## 2. Component Responsibilities
 
-### 2.1 Presentation Tier (`dashboard/`)
-- **`index.html`**: Semantic single-page application structure organized into 8 functional operational panels: Overview, Test Catalog, Regression Suite, Waveform Debugger, Log Inspector, Reports & Data, Defect Lab, and System Health.
-- **`css/style.css`**: Professional EDA Dark Mode theme with high-contrast signal coloring, glassmorphic cards, status badges, and responsive CSS grid.
-- **`js/app.js`**: Client-side state manager. Orchestrates REST requests, handles Server-Sent Events (`EventSource`), dynamic table rendering, toast alerts, and modal dialogs.
-- **`js/waveform_viewer.js`**: Zero-dependency 2D HTML5 Canvas rendering engine. Converts parsed VCD transition datasets into standard EDA digital waveform traces with zoom, horizontal panning, bit transitions, hex bus ribbons, and click-to-measure cursors.
+### 2.1 Verification Data Path Architecture
+To ensure rigorous, unbiased verification, the testbench enforces strict separation of concerns across active and passive components:
 
-### 2.2 Backend & Service Tier (`scripts/dashboard_server.py`)
+```
+Driver  (Drives stimulus on negedge clk)
+   ↓
+  DUT   (Updates registers on posedge clk)
+   ↓
+Monitor (Passively samples interface on posedge clk, qualifies valid transactions)
+   ↓
+Scoreboard (Compares actual monitored data vs golden queue model, verifies flags)
+   ↓
+PASS/FAIL ($fatal(1) if any scoreboard mismatch, SVA failure, or logged error)
+```
+
+1. **Active Stimulus Driver (`tb/fifo_driver.sv`)**:
+   - Drives interface pins (`rst_n`, `wr_en`, `wr_data`, `rd_en`) synchronously to `@(negedge clk)` so that signals are stable ahead of setup times on rising clock edges.
+   - Has zero access to the scoreboard reference model or expected outcomes.
+2. **Passive Monitor (`tb/fifo_monitor.sv`)**:
+   - Observes DUT interface signals passively on `@(posedge clk)`.
+   - Pre-samples boundary flags (`full_sample`, `empty_sample`) to accurately qualify whether transactions were accepted by the DUT.
+   - Forwards accepted writes (`wr_data`) and valid reads (`rd_data`) directly to `tb_top.scoreboard`.
+   - Forwards observed status flags (`full`, `empty`, `almost_full`, `almost_empty`, `count`) to the scoreboard for state checking.
+3. **Independent Golden Scoreboard (`tb/fifo_scoreboard.sv`)**:
+   - Maintains an independent golden reference queue (`logic [DATA_WIDTH-1:0] ref_queue[$]`).
+   - Compares dequeued actual data against expected golden data word-by-word.
+   - Independently calculates expected fill level and status flags from `ref_queue.size()`.
+   - Any mismatch increments error counters (`mismatched_reads`, `flag_errors`).
+4. **SystemVerilog Assertions (`tb/fifo_assertions.sv`)**:
+   - Implements 10 SystemVerilog Immediate Assertions (`assert (...) else $error(...)`) evaluating invariant properties on `@(posedge clk)`.
+   - Evaluates reset states, full/empty mutual exclusion, count bounds, flag invariants, and error protocol pulse timing.
+5. **Top Harness (`tb/tb_top.sv`)**:
+   - Wires clock generator (100MHz), reset generator, 50,000-cycle watchdog timer, and plusargs dispatcher.
+   - Evaluates total test errors at completion:
+     `total_test_errors = scoreboard.get_total_errors() + assertions.get_assertion_failures() + fifo_pkg::get_pkg_error_count();`
+   - Terminates with `$finish(0)` on pass or `$fatal(1)` on any error.
+
+### 2.2 Application & Service Tier (`scripts/dashboard_server.py`)
 - **`ThreadingHTTPServer`**: Multi-threaded HTTP server utilizing purely Python 3 standard library (`http.server`, `socket`, `threading`, `json`). Requires zero `pip` dependencies.
-- **`ExecutionManager`**: Thread-safe mutex-locked controller (`threading.Lock`) managing background job execution, status reporting, process cancellation, and live log buffer queuing.
-- **VCD Waveform Parser**: Streaming text parser extracting symbol definitions, wire/reg widths, timescales, and value transitions without loading redundant memory.
+- **`ExecutionManager`**: Thread-safe controller managing background job execution, status reporting, process cancellation, and live log buffer queuing.
+- **VCD Waveform Parser**: Streaming text parser extracting symbol definitions, wire/reg widths, timescales, and value transitions into JSON timing diagrams.
 - **GTKWave Desktop Launcher**: Cross-platform process spawner detecting local `gtkwave` installations across `/opt/homebrew/bin`, `/usr/local/bin`, and `/Applications/gtkwave.app`.
 
 ### 2.3 Verification Automation Tier (`scripts/`)
 - **`run_test.py`**: Dispatches single tests to `iverilog` and `vvp`. Passes runtime plusargs (`+TESTNAME=`, `+SEED=`, `+DUMP_WAVE=`), monitors simulation output, enforces timeouts, checks scoreboard pass/fail signatures, and returns deterministic exit codes.
-- **`regression.py`**: Batch regression manager. Compiles the testbench once and executes all 10 verification scenarios. Aggregates per-test durations, data mismatches, assertion failures, and outputs summary reports.
+- **`regression.py`**: Batch regression manager. Compiles the testbench once and executes all 10 verification scenarios. Supports `--demo-defect` mode for headless 3-stage defect lifecycle verification.
 - **`generate_report.py`**: Standalone artifact parser transforming raw simulation logs into machine-readable JSON/CSV and formatted Markdown summaries.
-
-### 2.4 Simulation & RTL Tier (`rtl/`, `tb/`, `tests/`)
-- **`rtl/sync_fifo.sv`**: Parameterized Synchronous FIFO (Data Width: 8, Depth: 16) with circular write/read pointers, fill counter, threshold comparators (`almost_full`, `almost_empty`), error flag generation (`overflow`, `underflow`), and compile-time defect injection hooks.
-- **`tb/fifo_driver.sv`**: Cycle-accurate stimulus driver handling reset, single writes, single reads, continuous bursts, and simultaneous read/write cycles.
-- **`tb/fifo_monitor.sv`**: Passive bus monitor sampling accepted writes and valid reads on `posedge clk` and pushing transactions to the scoreboard.
-- **`tb/fifo_scoreboard.sv`**: Golden reference model maintaining an independent reference queue (`logic [7:0] ref_queue[$]`). Performs cycle-accurate data matching and fill tracking.
-- **`tb/fifo_assertions.sv`**: SystemVerilog Assertions (SVA) checking safety invariants (`!(full && empty)`, `count <= DEPTH`, `overflow` on full write, `underflow` on empty read).
-- **`tb/tb_top.sv`**: Top-level testbench harness generating 100MHz clock, reset, 50,000-cycle watchdog timer, and plusarg test dispatcher.
 
 ---
 
@@ -110,28 +139,37 @@ The backend exposes a strictly defined REST API with input sanitization and zero
 | `GET` | `/api/defects` | List available defect injection macros | None | JSON (`defects: {...}`) |
 | `POST` | `/api/run-test` | Trigger single test execution | `{"test_name", "seed", "wave", "bug_macro"}` | JSON (`status: "STARTED"`) |
 | `POST` | `/api/run-regression`| Trigger full 10-test regression | `{"seed", "wave"}` | JSON (`status: "STARTED"`) |
-| `POST` | `/api/defect-demo/run`| Launch 3-stage defect injection experiment | `{"defect_macro": "BUG_INJECT_..."}` | JSON (`status: "STARTED"`) |
+| `POST` | `/api/defect-demo/run`| Launch validated 3-stage defect injection experiment | `{"defect_macro": "BUG_INJECT_..."}` | JSON (`status: "STARTED"`) |
 | `POST` | `/api/cancel-job` | Abort active simulation process | None | JSON (`message: "Aborted"`) |
 | `POST` | `/api/waves/open` | Launch native desktop GTKWave viewer | `{"test_name": "<test>"}` | JSON (`message: "Launched"`) |
 | `POST` | `/api/workspace/clean`| Clean build binaries and old logs | None | JSON (`message: "Cleaned"`) |
 
 ---
 
-## 4. Process Lifecycle & State Machine
+## 4. Validated Defect-Injection Lifecycle
 
-```mermaid
-stateDiagram-v2
-    [*] --> IDLE
-    IDLE --> COMPILING: POST /api/run-test or /api/run-regression
-    COMPILING --> RUNNING: Compile Successful
-    COMPILING --> FAILED: Compiler Error (Syntax / Elaboration)
-    RUNNING --> RUNNING: Executing Test N/10 (SSE Log Stream)
-    RUNNING --> COMPLETED: All Tests Passed
-    RUNNING --> FAILED: Scoreboard / SVA Error / Timeout
-    RUNNING --> CANCELLED: POST /api/cancel-job
-    COMPLETED --> IDLE: Ready for Next Command
-    FAILED --> IDLE: Ready for Next Command
-    CANCELLED --> IDLE: Ready for Next Command
+The defect demonstration follows a deterministic 3-stage state machine that validates actual simulation outcomes:
+
+```
+[STAGE 1: DEFECT INJECTION]
+Compile RTL with `+define+<BUG_MACRO>`
+Run regression suite
+VALIDATION CHECK:
+- Did regression fail?
+- Did the expected test detector fail?
+IF NO -> Mark DEMO FAILED and abort!
+IF YES -> Proceed to Stage 2.
+       ↓
+[STAGE 2: RESTORE CLEAN BASELINE]
+Compile clean golden RTL (`sync_fifo.sv`)
+       ↓
+[STAGE 3: CLEAN VERIFICATION PASS]
+Run regression on golden RTL
+VALIDATION CHECK:
+- Did all 10 tests pass?
+- Were zero errors reported?
+IF NO -> Mark DEMO FAILED!
+IF YES -> Mark STAGE_3_VERIFIED!
 ```
 
 ---

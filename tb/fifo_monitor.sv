@@ -1,8 +1,12 @@
 //=============================================================================
 // Module: fifo_monitor
-// Description: Passive transaction monitor for sync_fifo. Samples DUT interface
-//              signals on active clock edges and forwards observed transactions
-//              and status flags to the independent scoreboard.
+// Description: Passive transaction monitor for sync_fifo.
+//              Observes DUT interface signals on active clock edges, qualifies
+//              valid write and read transactions, and actively forwards observed
+//              transactions and status checks to the independent scoreboard.
+//
+// Data Path Architecture:
+// Driver -> DUT -> Monitor -> Scoreboard -> PASS/FAIL
 //=============================================================================
 
 `timescale 1ns / 1ps
@@ -30,23 +34,64 @@ module fifo_monitor #(
     input logic [$clog2(DEPTH+1)-1:0] count
 );
 
-    // Connected to scoreboard via hierarchical reference or direct instance
-    // Scoreboard instance handle will be resolved in tb_top
+    // Monitoring transaction counters
+    int monitored_writes;
+    int monitored_reads;
 
-    // Internal flags to track expected error event pulses
-    logic prev_overflow_event;
-    logic prev_underflow_event;
+    // Sample state prior to active clock edge for valid write/read qualification
+    logic full_sample;
+    logic empty_sample;
 
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            prev_overflow_event  <= 1'b0;
-            prev_underflow_event <= 1'b0;
-        end else begin
-            // An overflow event occurs when wr_en is high while full without reading
-            prev_overflow_event  <= wr_en && full && !rd_en;
-            // An underflow event occurs when rd_en is high while empty
-            prev_underflow_event <= rd_en && empty;
+    initial begin
+        monitored_writes = 0;
+        monitored_reads  = 0;
+        full_sample      = 1'b0;
+        empty_sample     = 1'b1;
+    end
+
+    // Pre-edge boundary sampling
+    always @(posedge clk) begin
+        full_sample  <= full;
+        empty_sample <= empty;
+    end
+
+    // Active sampling and forwarding to scoreboard
+    always @(posedge clk) begin
+        if (rst_n) begin
+            #1ps; // Settle post-clock-edge non-blocking register updates
+
+            // 1. Monitor accepted write transaction
+            if (wr_en && (!full_sample || rd_en)) begin
+                monitored_writes++;
+                tb_top.scoreboard.write_sample(wr_data);
+            end
+
+            // 2. Monitor valid read transaction
+            if (rd_en && !empty_sample) begin
+                monitored_reads++;
+                tb_top.scoreboard.read_sample(rd_data);
+            end
+
+            // 3. Monitor and forward comprehensive status flags to scoreboard
+            tb_top.scoreboard.check_state(full, empty, almost_full, almost_empty, count);
         end
     end
+
+    function automatic int get_monitored_writes();
+        return monitored_writes;
+    endfunction
+
+    function automatic int get_monitored_reads();
+        return monitored_reads;
+    endfunction
+
+    task automatic report_monitor();
+        $display("--------------------------------------------------");
+        $display("           MONITOR VERIFICATION REPORT            ");
+        $display("--------------------------------------------------");
+        $display("  Total Monitored Writes  : %0d", monitored_writes);
+        $display("  Total Monitored Reads   : %0d", monitored_reads);
+        $display("--------------------------------------------------");
+    endtask
 
 endmodule

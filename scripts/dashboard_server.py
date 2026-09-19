@@ -56,6 +56,15 @@ VALID_BUG_MACROS = {
     "BUG_INJECT_RESET_NEGLECT": "Fails to clear error flags during reset.",
 }
 
+# Expected failure signatures for deterministic defect verification
+EXPECTED_DEFECT_FAILURES = {
+    "BUG_INJECT_OVERFLOW": ["test_overflow", "test_random_traffic"],
+    "BUG_INJECT_UNDERFLOW_FLAG": ["test_underflow"],
+    "BUG_INJECT_COUNT_SIMULTANEOUS": ["test_simultaneous_rw"],
+    "BUG_INJECT_ALMOST_FULL": ["test_almost_flags"],
+    "BUG_INJECT_RESET_NEGLECT": ["test_reset"],
+}
+
 # Test descriptions extracted from test header comments
 TEST_METADATA = {
     "test_reset": {
@@ -427,13 +436,39 @@ class ExecutionManager:
                     self.emit_log(f"  [{idx}/10] {t_name} -> {tag}")
 
                 bug_failed = [t for t in bug_results if not t["passed"]]
+                failed_names = [t["test_name"] for t in bug_failed]
+                expected = EXPECTED_DEFECT_FAILURES.get(bug_macro, [])
+
+                if len(bug_failed) == 0:
+                    self.update_state(
+                        status="FAILED",
+                        demo_step="STAGE_1_FAILED",
+                        error_message=f"Defect demonstration failed: Injected defect '{bug_macro}' was NOT detected by any test."
+                    )
+                    self.emit_log("--------------------------------------------------------------------------------")
+                    self.emit_log(f"[DEMO FAILED] Defect '{bug_macro}' was NOT detected! All tests passed unexpectedly.")
+                    self.emit_log("--------------------------------------------------------------------------------")
+                    return
+
+                # Verify that expected detector test actually failed
+                matched_expected = [t for t in expected if t in failed_names]
+                if expected and not matched_expected:
+                    self.update_state(
+                        status="FAILED",
+                        demo_step="STAGE_1_FAILED",
+                        error_message=f"Defect demonstration failed: Expected failure in {expected}, but observed {failed_names}."
+                    )
+                    self.emit_log(f"[DEMO FAILED] Expected test(s) {expected} did not fail. Observed failures: {failed_names}")
+                    return
+
                 self.emit_log("--------------------------------------------------------------------------------")
-                self.emit_log(f"[DEMO STAGE 1 COMPLETE] Defect '{bug_macro}' was successfully DETECTED!")
-                self.emit_log(f"  Detected by {len(bug_failed)} failing test(s): {[t['test_name'] for t in bug_failed]}")
+                self.emit_log(f"[DEMO STAGE 1 COMPLETE] Defect '{bug_macro}' was deterministically DETECTED!")
+                self.emit_log(f"  Observed {len(bug_failed)} failing test(s): {failed_names}")
+                self.emit_log(f"  Verified detector(s): {matched_expected if matched_expected else failed_names}")
                 self.emit_log("--------------------------------------------------------------------------------")
 
                 # STAGE 2: Restore Clean Baseline
-                time.sleep(1)
+                time.sleep(0.5)
                 self.update_state(demo_step="STAGE_2_RESTORE", status="COMPILING")
                 self.emit_log("[DEMO STAGE 2] Restoring clean RTL baseline and compiling clean binary...")
                 ok_clean, msg_clean, _ = compile_testbench(self.root_dir, self.sim_dir, None)
@@ -446,17 +481,33 @@ class ExecutionManager:
                 self.emit_log("[DEMO STAGE 2] Re-running regression on clean baseline...")
 
                 clean_results = []
+                clean_failed = []
                 for idx, t_name in enumerate(test_list, start=1):
                     if self.cancelled:
                         return
                     self.update_state(active_test=t_name, current_index=idx, progress_pct=50 + int(idx / 20 * 100))
                     res = run_single_test(vvp, clean_binary, t_name, 42, False, self.logs_dir / f"{t_name}.log", 30)
                     clean_results.append(res)
-                    self.emit_log(f"  [{idx}/10] {t_name} -> PASS")
+                    if res["passed"]:
+                        self.emit_log(f"  [{idx}/10] {t_name} -> PASS")
+                    else:
+                        clean_failed.append(res)
+                        self.emit_log(f"  [{idx}/10] {t_name} -> FAIL (UNEXPECTED ON CLEAN RTL)")
+
+                if len(clean_failed) > 0:
+                    self.update_state(
+                        status="FAILED",
+                        demo_step="STAGE_2_FAILED",
+                        error_message=f"Clean baseline verification failed: {len(clean_failed)} test(s) failed on golden RTL."
+                    )
+                    self.emit_log("================================================================================")
+                    self.emit_log(f"  [DEMO FAILED] Clean restoration verification failed! Broken tests: {[t['test_name'] for t in clean_failed]}")
+                    self.emit_log("================================================================================")
+                    return
 
                 self.emit_log("================================================================================")
-                self.emit_log("  DEFECT DEMONSTRATION LAB: SUCCESSFUL")
-                self.emit_log("  1. Injected defect caused deterministic failure.")
+                self.emit_log("  DEFECT DEMONSTRATION LAB: VERIFIED & COMPLETED")
+                self.emit_log(f"  1. Injected defect '{bug_macro}' caused expected deterministic failure(s): {matched_expected if matched_expected else failed_names}.")
                 self.emit_log("  2. Restored clean RTL passed 10/10 verification tests.")
                 self.emit_log("================================================================================")
 
@@ -466,7 +517,7 @@ class ExecutionManager:
                     progress_pct=100,
                     latest_result={
                         "defect_macro": bug_macro,
-                        "detected_failures": [t["test_name"] for t in bug_failed],
+                        "detected_failures": failed_names,
                         "clean_passed": len(clean_results),
                     },
                 )

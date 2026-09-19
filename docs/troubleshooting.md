@@ -1,6 +1,6 @@
 # Troubleshooting & Diagnostic Guide
 
-A comprehensive troubleshooting reference for the **RTL Verification & Automated Regression Studio**, covering local environment setup, dashboard operations, simulator diagnostics, and waveform visualization.
+A comprehensive troubleshooting reference for the **RTL Verification & Automated Regression Studio**, covering local environment setup, dashboard operations, simulator diagnostics, defect demonstrations, and waveform visualization.
 
 ---
 
@@ -53,15 +53,13 @@ OSError: [Errno 48] Address already in use
     ```
   - **Verification**: Navigate to the **System Health** panel in the dashboard to confirm detected paths for both `iverilog` and `vvp`.
 
-### Symptom: Elaboration or Syntax Error during Simulation
+### Symptom: Syntax Error on SVA or `property` Construct
 ```text
-syntax error in SystemVerilog source
+syntax error
+error: Invalid module item.
 ```
-- **Cause**: Icarus Verilog defaults to older Verilog-1995/2001 mode unless instructed.
-- **Resolution**: The framework automatically enforces `-g2012` flag across all compilations. If compiling manually, ensure `-g2012` is included:
-  ```bash
-  iverilog -g2012 -Wall -I rtl -I tb -I tests -o sim/tb_top.vvp tb/tb_top.sv rtl/sync_fifo.sv
-  ```
+- **Cause**: Attempting to use concurrent assertions (`property ... endproperty` or `assert property (...)`), which are not supported by Icarus Verilog.
+- **Resolution**: The framework uses SystemVerilog **Immediate Assertions** (`assert (...) else $error(...)`), which compile and evaluate cleanly under `iverilog -g2012`. Concurrent temporal expressions are documented as a toolchain limitation in `docs/verification_plan.md`.
 
 ---
 
@@ -98,20 +96,25 @@ syntax error in SystemVerilog source
 
 ## 4. Defect-Injection Lab Diagnostics
 
-### Symptom: Clean Regression Fails after Running Defect Lab
-- **Cause**: A previous simulation was forcibly killed mid-execution, leaving the injected compiler define active or the workspace binary stale.
+### Symptom: Defect Demo Fails with "Clean restoration verification failed"
+- **Cause**: A previous simulation was killed mid-execution, leaving a stale binary compiled with a bug macro.
 - **Resolution**:
-  1. Open the **System Health** panel in the dashboard.
-  2. Click the **"Purge Build Artifacts & Logs"** button.
-  3. Alternatively, trigger a clean compile from the **Regression Suite** panel.
-  4. In terminal: `make clean && make regression`.
+  1. In the Dashboard: Navigate to **System Health** and click **"Purge Build Artifacts & Logs"**.
+  2. In Terminal:
+     ```bash
+     make clean && make regression
+     ```
+  3. Run the defect demo again:
+     ```bash
+     make demo-defect BUG=BUG_INJECT_OVERFLOW
+     ```
 
 ---
 
 ## 5. Python Runtime Diagnostics
 
 ### Symptom: `No module named ...`
-- **Cause**: Python is running in a misconfigured virtual environment or calling an incompatible interpreter.
+- **Cause**: Python is running in an unexpected environment or missing standard libraries.
 - **Resolution**:
   The entire framework—including the web dashboard server, REST API, regression runner, and report generator—is built **strictly using the Python 3 Standard Library**. It requires **zero** third-party packages (`no pip install`, `no flask`, `no npm`, `no node`).
   Verify your interpreter version:

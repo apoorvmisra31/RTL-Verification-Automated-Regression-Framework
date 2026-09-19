@@ -54,6 +54,16 @@ def discover_tests(tests_dir: Path) -> list:
     return tests
 
 
+# Expected failure signatures for deterministic defect verification
+EXPECTED_DEFECT_FAILURES = {
+    "BUG_INJECT_OVERFLOW": ["test_overflow", "test_random_traffic"],
+    "BUG_INJECT_UNDERFLOW_FLAG": ["test_underflow"],
+    "BUG_INJECT_COUNT_SIMULTANEOUS": ["test_simultaneous_rw"],
+    "BUG_INJECT_ALMOST_FULL": ["test_almost_flags"],
+    "BUG_INJECT_RESET_NEGLECT": ["test_reset"],
+}
+
+
 def compile_testbench(root_dir: Path, sim_dir: Path, bug_macro: str = None) -> tuple:
     """Compile RTL and Testbench using iverilog."""
     iverilog = find_tool("iverilog")
@@ -276,12 +286,105 @@ def print_dashboard(results: dict):
     print("=" * 95 + "\n")
 
 
+def run_defect_demonstration(root_dir: Path, bug_macro: str, seed: int = 42) -> int:
+    """
+    Execute a validated 3-stage defect injection demonstration:
+    Stage 1: Compile with bug macro, run regression, verify defect is caught.
+    Stage 2: Compile clean golden RTL baseline.
+    Stage 3: Run clean regression, verify 10/10 tests pass.
+    Returns 0 on complete verified success, 1 on failure.
+    """
+    sim_dir = root_dir / "sim"
+    log_dir = root_dir / "reports" / "logs"
+    tests_dir = root_dir / "tests"
+    test_list = discover_tests(tests_dir)
+    vvp = find_tool("vvp")
+
+    print("\n" + "=" * 80)
+    print(f"  CONTROLLED DEFECT DEMONSTRATION: {bug_macro}")
+    print(f"  Expected Failure Detectors: {EXPECTED_DEFECT_FAILURES.get(bug_macro, 'Any')}")
+    print("=" * 80)
+
+    # STAGE 1: Defect Injection
+    print(f"\n[DEMO STAGE 1] Compiling testbench with defect define: {bug_macro}...")
+    ok, msg, code = compile_testbench(root_dir, sim_dir, bug_macro)
+    if not ok:
+        print(f"[DEMO FAILED] Compilation with defect failed: {msg}")
+        return 1
+
+    binary_path = msg
+    print("[DEMO STAGE 1] Executing regression to observe defect detection...")
+    bug_results = []
+    for idx, t_name in enumerate(test_list, start=1):
+        log_file = log_dir / f"{t_name}.log"
+        res = run_single_test(vvp, binary_path, t_name, seed, False, log_file, 30)
+        bug_results.append(res)
+        tag = "PASS" if res["passed"] else "FAIL (EXPECTED)"
+        print(f"  [{idx}/{len(test_list)}] {t_name:<28} -> {tag}")
+
+    bug_failed = [t for t in bug_results if not t["passed"]]
+    failed_names = [t["test_name"] for t in bug_failed]
+    expected = EXPECTED_DEFECT_FAILURES.get(bug_macro, [])
+
+    if not bug_failed:
+        print(f"\n[DEMO FAILED] Defect '{bug_macro}' was NOT detected! All tests unexpectedly passed.")
+        return 1
+
+    matched = [t for t in expected if t in failed_names]
+    if expected and not matched:
+        print(f"\n[DEMO FAILED] Defect '{bug_macro}' did not trigger expected failures {expected}. Observed: {failed_names}")
+        return 1
+
+    print("-" * 80)
+    print(f"[DEMO STAGE 1 SUCCESS] Defect '{bug_macro}' was deterministically DETECTED!")
+    print(f"  Observed Failures : {failed_names}")
+    print(f"  Verified Detectors: {matched if matched else failed_names}")
+    print("-" * 80)
+
+    # STAGE 2: Restore Clean Baseline
+    print("\n[DEMO STAGE 2] Restoring clean RTL baseline and compiling clean binary...")
+    ok_clean, msg_clean, code_clean = compile_testbench(root_dir, sim_dir, None)
+    if not ok_clean:
+        print(f"[DEMO FAILED] Clean baseline compilation failed: {msg_clean}")
+        return 1
+
+    clean_binary = msg_clean
+
+    # STAGE 3: Clean Verification
+    print("[DEMO STAGE 3] Re-running regression on restored golden baseline...")
+    clean_results = []
+    clean_failed = []
+    for idx, t_name in enumerate(test_list, start=1):
+        log_file = log_dir / f"{t_name}.log"
+        res = run_single_test(vvp, clean_binary, t_name, seed, False, log_file, 30)
+        clean_results.append(res)
+        if res["passed"]:
+            print(f"  [{idx}/{len(test_list)}] {t_name:<28} -> PASS")
+        else:
+            clean_failed.append(res)
+            print(f"  [{idx}/{len(test_list)}] {t_name:<28} -> FAIL (UNEXPECTED ON CLEAN RTL)")
+
+    if clean_failed:
+        print("\n" + "=" * 80)
+        print(f"[DEMO FAILED] Clean baseline failed with {len(clean_failed)} errors on tests: {[t['test_name'] for t in clean_failed]}")
+        print("=" * 80)
+        return 1
+
+    print("\n" + "=" * 80)
+    print("  DEFECT DEMONSTRATION COMPLETE: VERIFIED")
+    print(f"  1. Injected defect '{bug_macro}' caused expected deterministic failure(s): {matched if matched else failed_names}.")
+    print("  2. Restored clean RTL passed 10/10 verification tests.")
+    print("=" * 80 + "\n")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="Automated Regression Runner for sync_fifo")
     parser.add_argument("--tests", default=None, help="Comma-separated test names to run (default: all discovered tests)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
     parser.add_argument("--wave", action="store_true", help="Enable waveform dumping for all tests")
     parser.add_argument("--bug", default=None, help="Defect injection macro (e.g. BUG_INJECT_OVERFLOW)")
+    parser.add_argument("--demo-defect", default=None, choices=list(EXPECTED_DEFECT_FAILURES.keys()), help="Run validated 3-stage defect injection demo")
     parser.add_argument("--timeout", type=int, default=30, help="Per-test timeout in seconds (default: 30)")
     parser.add_argument("--sim-dir", default="sim", help="Build directory")
     parser.add_argument("--out-dir", default="reports", help="Reports output directory")
@@ -289,6 +392,12 @@ def main():
     args = parser.parse_args()
 
     root_dir = Path(__file__).resolve().parent.parent
+
+    # Check for defect demonstration mode
+    if args.demo_defect:
+        ret = run_defect_demonstration(root_dir, args.demo_defect, args.seed)
+        sys.exit(ret)
+
     sim_dir = root_dir / args.sim_dir
     reports_dir = root_dir / args.out_dir
     log_dir = reports_dir / "logs"

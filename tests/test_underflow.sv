@@ -29,6 +29,10 @@ task automatic run_test_underflow();
         if (dut.count !== 0 || !dut.empty) begin
             log_error($sformatf("Count/empty changed on illegal read! count=%0d, empty=%0b", dut.count, dut.empty));
         end
+        // On iteration i >= 1, the previous illegal read must have asserted underflow
+        if (i >= 1 && !dut.underflow) begin
+            log_error($sformatf("Underflow flag was NOT asserted on cycle %0d of illegal read!", i));
+        end
     end
 
     @(negedge clk);
@@ -36,9 +40,9 @@ task automatic run_test_underflow();
     @(posedge clk);
     #1ps;
 
-    // Verify underflow flag was asserted
-    if (!dut.underflow) begin
-        log_error("Underflow flag was NOT asserted after illegal read from empty FIFO!");
+    // Verify underflow flag deasserts once illegal reads stop
+    if (dut.underflow) begin
+        log_error("Underflow flag failed to deassert after illegal read stopped!");
     end
 
     driver.idle(3);

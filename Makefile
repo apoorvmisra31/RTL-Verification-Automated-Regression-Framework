@@ -25,7 +25,7 @@ SEED  ?= 42
 WAVE  ?= 0
 BUG   ?=
 
-.PHONY: all help dashboard gui compile test regression regression-bug wave report clean
+.PHONY: all help dashboard gui compile test regression regression-bug demo-defect wave report clean
 
 # Default target
 all: dashboard
@@ -46,6 +46,8 @@ help:
 	@echo "    make regression               Execute all 10 tests and generate reports"
 	@echo "    make regression-bug BUG=<def> Run regression with injected RTL defect"
 	@echo "                              (e.g. BUG=BUG_INJECT_OVERFLOW)"
+	@echo "    make demo-defect BUG=<def>    Execute validated 3-stage defect lifecycle demo"
+	@echo "                              (Inject -> Verify Failure -> Restore -> Verify Pass)"
 	@echo "    make wave TEST=<name>         Open test waveform in GTKWave"
 	@echo "    make report                   Display latest regression report summary"
 	@echo "    make clean                    Remove all build, log, report, and wave artifacts"
@@ -80,6 +82,13 @@ regression-bug:
 	fi
 	@mkdir -p $(SIM_DIR) $(LOGS_DIR) $(WAVES_DIR)
 	@$(PYTHON) $(SCRIPTS_DIR)/regression.py --bug $(BUG) --seed $(SEED)
+
+demo-defect:
+	@if [ -z "$(BUG)" ]; then \
+		echo "Error: Please specify BUG=<macro>. Example: make demo-defect BUG=BUG_INJECT_OVERFLOW"; \
+		exit 1; \
+	fi
+	@$(PYTHON) $(SCRIPTS_DIR)/regression.py --demo-defect $(BUG) --seed $(SEED)
 
 wave:
 	@if [ ! -f "$(WAVES_DIR)/$(TEST).vcd" ]; then \
